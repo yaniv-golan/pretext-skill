@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Install Pretext Skill in Claude Desktop</title>
+<style>
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #f9f5f1; color: #3d3929; }
+.card { text-align: center; padding: 3rem; max-width: 480px; }
+h1 { font-size: 1.4rem; margin-bottom: 1rem; }
+p { color: #6b5e4f; line-height: 1.6; }
+a { color: #d97757; text-decoration: none; font-weight: 600; }
+a:hover { text-decoration: underline; }
+.fallback { display: none; }
+</style>
+</head>
+<body>
+<div class="card">
+<h1>Installing Pretext Skill</h1>
+<p id="status">Opening Claude Desktop...</p>
+<div id="fallback" class="fallback">
+<p>Claude Desktop didn't open. You can:</p>
+<p><a href="claude://claude.ai/customize/plugins/new?marketplace=https://github.com/yaniv-golan/pretext-skill&plugin=pretext">Try again</a></p>
+<p>Or install manually: open Claude Desktop, click <strong>Customize</strong>, then <strong>Browse Plugins</strong>, add marketplace <code>yaniv-golan/pretext-skill</code>.</p>
+</div>
+<p><a href="https://github.com/yaniv-golan/pretext-skill">Back to Pretext Skill on GitHub</a></p>
+</div>
+<script>
+var deepLink = "claude://claude.ai/customize/plugins/new?marketplace=https://github.com/yaniv-golan/pretext-skill&plugin=pretext";
+var repo = "https://github.com/yaniv-golan/pretext-skill";
+
+// Try opening the deep link
+window.location = deepLink;
+
+// If the page is still visible after 5s, the deep link likely didn't work
+setTimeout(function() {
+  if (!document.hidden) {
+    document.getElementById("status").textContent = "";
+    document.getElementById("fallback").style.display = "block";
+  }
+}, 5000);
+
+// If the user comes back to this tab (Claude opened then they switched back), redirect to repo
+document.addEventListener("visibilitychange", function() {
+  if (!document.hidden) {
+    setTimeout(function() { window.location = repo; }, 500);
+  }
+});
+</script>
+</body>
+</html>
