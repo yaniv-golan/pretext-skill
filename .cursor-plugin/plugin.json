@@ -1,0 +1,13 @@
+{
+  "name": "pretext",
+  "displayName": "Pretext",
+  "version": "0.1.0",
+  "description": "AI skill for @chenglou/pretext — the 15KB TypeScript text measurement library that computes exact text metrics without DOM reflows",
+  "author": {
+    "name": "Yaniv Golan",
+    "email": "yaniv@golan.name"
+  },
+  "license": "MIT",
+  "keywords": ["pretext", "text-measurement", "text-layout", "canvas", "typography", "reflow-free"],
+  "skills": "./pretext/skills"
+}

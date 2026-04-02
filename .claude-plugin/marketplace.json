@@ -1,0 +1,23 @@
+{
+  "name": "pretext-marketplace",
+  "owner": {
+    "name": "Yaniv Golan",
+    "email": "yaniv@golan.name"
+  },
+  "metadata": {
+    "description": "AI skill for @chenglou/pretext text measurement library"
+  },
+  "plugins": [
+    {
+      "name": "pretext",
+      "source": "./pretext",
+      "description": "Help developers use @chenglou/pretext for exact text metrics without DOM reflows",
+      "author": {
+        "name": "Yaniv Golan",
+        "email": "yaniv@golan.name"
+      },
+      "category": "development",
+      "tags": ["pretext", "text-measurement", "text-layout", "canvas", "typography"]
+    }
+  ]
+}
