@@ -16,12 +16,23 @@ An AI agent skill that helps developers use **[@chenglou/pretext](https://github
 
 Uses the open [Agent Skills](https://agentskills.io) standard. Works with Claude Desktop, Claude Cowork, Claude Code, Codex CLI, Cursor, Windsurf, Manus, ChatGPT, and any other compatible tool.
 
-## What It Does
+## About @chenglou/pretext
 
-Pretext computes exact text dimensions using pure math — no DOM reflows. This skill teaches AI agents how to use it correctly, covering:
+[Pretext](https://github.com/chenglou/pretext) is a small, tree-shakable TypeScript library by Cheng Lou. It uses `CanvasRenderingContext2D.measureText` internally, segments text, measures once, caches, then does arithmetic for all subsequent layouts. Each `layout()` call is ~0.0002ms — safe to call every animation frame.
 
-- **API usage** — all 13 core functions plus the 5 functions in `@chenglou/pretext/rich-inline`, with correct argument order, types, and parameter-order asymmetries
-- **Critical gotchas** — the lineHeight-must-be-pixels bug, argument order, font loading timing, ESM-only packaging, parameter-order swap between core and rich-inline
+**Key capabilities:**
+- Know text dimensions before rendering (virtual scrolling, masonry layouts)
+- Auto-fit text to a container (find largest font that fits N lines)
+- Flow text around obstacles (magazine-style layouts)
+- Render rich inline text — mentions, chips, code spans — via the `@chenglou/pretext/rich-inline` subpath
+- Measure text in canvas/SVG/WebGL
+
+## What This Skill Covers
+
+This skill teaches AI agents how to use pretext correctly:
+
+- **API usage** — all 13 core functions plus the 5 in `@chenglou/pretext/rich-inline`, with correct argument order, types, and parameter-order asymmetries
+- **Critical gotchas** — the lineHeight-must-be-pixels bug, argument order, font loading timing, ESM-only packaging, the parameter-order swap between core and rich-inline
 - **Integration patterns** — wrapper modules, auto-fit font size, height estimation, text around obstacles with and without string allocation, rich inline runs with chips/mentions, shrink-wrap chat bubbles
 - **Creative patterns** — editorial layouts, balanced/Knuth-Plass paragraphs, streaming AI chat (with honest cost notes), framework-integration idioms (React/Vue/Svelte)
 - **When NOT to use Pretext** — CSS-only solutions, HTML content, fragile virtualizer integrations, per-token streaming over very long messages
@@ -112,7 +123,7 @@ Download [`pretext-skill.zip`](https://github.com/yaniv-golan/pretext-skill/rele
 
 ## Usage
 
-The skill auto-activates when you mention pretext, `@chenglou/pretext`, text measurement without DOM, auto-fit font size, `layoutNextLine`, or text around obstacles. Examples:
+The skill auto-activates whenever your AI assistant encounters something it covers. Triggers include any mention of pretext, `@chenglou/pretext`, or `@chenglou/pretext/rich-inline`; symptom phrases like *"measure text height without triggering DOM reflow"*; capability mentions like auto-fitting font size, flowing text around obstacles, computing intrinsic line width, rich inline runs with chips or mentions; and API names like `layoutNextLine`, `layoutNextLineRange`, or `prepareWithSegments`. Example queries:
 
 ```
 I need to measure text height without triggering a reflow
@@ -126,16 +137,18 @@ How do I auto-fit a headline to 3 lines using pretext?
 Help me flow text around a circular image using layoutNextLine
 ```
 
-## What Pretext Is
+```
+How do I render an @mention chip inside a chat bubble using pretext's rich-inline?
+```
 
-[Pretext](https://github.com/chenglou/pretext) is a small, tree-shakable TypeScript library by Cheng Lou. It uses `CanvasRenderingContext2D.measureText` internally, segments text, measures once, caches, then does arithmetic for all subsequent layouts. Each `layout()` call is ~0.0002ms — safe to call every animation frame.
+## Changelog
 
-**Key capabilities:**
-- Know text dimensions before rendering (virtual scrolling, masonry layouts)
-- Auto-fit text to a container (find largest font that fits N lines)
-- Flow text around obstacles (magazine-style layouts)
-- Render rich inline text — mentions, chips, code spans — via the `@chenglou/pretext/rich-inline` subpath
-- Measure text in canvas/SVG/WebGL
+See [CHANGELOG.md](CHANGELOG.md) for the full version history. The latest release notes are on the [GitHub Releases](https://github.com/yaniv-golan/pretext-skill/releases) page.
+
+## Contributing
+
+- [docs/cross-platform.md](docs/cross-platform.md) — how this single repo ships to Claude Code, Cursor, ChatGPT, Manus, Codex CLI, and any agentskills.io host
+- [VERSIONING.md](VERSIONING.md) — version source-of-truth and release process
 
 ## License
 

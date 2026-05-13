@@ -31,11 +31,21 @@ The version appears in these files (all managed by the bump script):
 ```bash
 # 1. Bump version
 ./tools/bump-version.sh X.Y.Z
-# 2. Commit
-git commit -am "chore: bump version to X.Y.Z"
-# 3. Tag and push
-git tag vX.Y.Z
-git push origin main --tags
+
+# 2. Update CHANGELOG.md with a new "## [X.Y.Z] - YYYY-MM-DD" entry
+#    (the release workflow extracts notes from here via awk)
+
+# 3. Commit
+git add VERSION CHANGELOG.md pretext/skills/pretext/VERSION \
+        pretext/skills/pretext/SKILL.md \
+        pretext/.claude-plugin/plugin.json \
+        .cursor-plugin/plugin.json
+git commit -m "Release vX.Y.Z: <one-line summary>"
+
+# 4. Tag and push (tag separately — avoids pushing all local tags)
+git tag -a vX.Y.Z -m "vX.Y.Z: <one-line summary>"
+git push origin main
+git push origin vX.Y.Z
 ```
 
-CI automatically creates a GitHub Release with a generic zip for Manus, ChatGPT, and other platforms.
+CI (`.github/workflows/release.yml`) runs on `v*` tags, builds `pretext-skill.zip`, extracts the matching CHANGELOG section as release notes, and publishes a GitHub Release. If you want different copy on the release page than what's in CHANGELOG.md, edit the release directly afterwards: `gh release edit vX.Y.Z --notes-file <file>`.

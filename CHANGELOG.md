@@ -2,6 +2,8 @@
 
 All notable changes to this project will be documented in this file.
 
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Note: this file is the *technical* changelog for contributors — the GitHub Releases page may show user-facing release notes that summarize the same release differently.
+
 ## [0.2.0] - 2026-05-13
 
 This release updates the skill to cover `@chenglou/pretext` v0.0.7 (published 2026-05-10), six upstream releases beyond what 0.1.0 documented. The skill now describes the full 18-function public surface (13 from the main entry + 5 from the new `@chenglou/pretext/rich-inline` subpath).
