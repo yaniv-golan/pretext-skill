@@ -1,21 +1,27 @@
 ---
 name: pretext
 description: >-
-  Help developers use @chenglou/pretext, the 15KB TypeScript text measurement library that computes
-  exact text metrics without DOM reflows. Use when user mentions pretext, @chenglou/pretext,
-  text measurement, text layout without DOM, text reflow, text around obstacles, auto-fit font size,
-  layoutNextLine, or asks to measure text height/width in JavaScript without triggering browser reflow.
-  Covers API usage, integration patterns, creative demos (ASCII art, obstacle-aware flow, masonry),
-  and critical gotchas. Do NOT use for CSS-only text layout questions or general typography.
+  Help developers use @chenglou/pretext, a small TypeScript text measurement
+  library that computes exact text metrics without DOM reflows. Use when users
+  mention pretext, @chenglou/pretext, @chenglou/pretext/rich-inline, measuring
+  text height without triggering DOM reflow, measuring text height or line
+  count in JS, auto-fitting font size to a container, flowing text around
+  obstacles or images, laying out text per-line with variable widths, computing
+  the natural/widest line width of a paragraph, rich inline runs with chips or
+  mentions, layoutNextLine, or layoutNextLineRange. Covers API usage,
+  integration patterns, and gotchas (lineHeight must be CSS pixels, font
+  loading timing, system-ui caveats, ESM-only packaging). Do NOT use for
+  CSS-only text layout questions, generic typography advice, or unrelated
+  "shrink-to-fit" CSS questions.
+license: MIT
 metadata:
   author: Yaniv Golan
-  version: "0.1.0"
-  license: MIT
+  version: "0.2.0"
 ---
 
 # Pretext Integration Guide
 
-You are helping a developer use **@chenglou/pretext** — a 15KB TypeScript library by Cheng Lou that computes exact text metrics using pure math (no DOM reflows). It uses `CanvasRenderingContext2D.measureText` internally, segments text, measures once, caches, then does arithmetic for all subsequent layouts.
+You are helping a developer use **@chenglou/pretext** — a small, tree-shakable TypeScript library by Cheng Lou that computes exact text metrics using pure math (no DOM reflows). It uses `CanvasRenderingContext2D.measureText` internally, segments text, measures once, caches, then does arithmetic for all subsequent layouts. The package ships proper ESM with subpath exports (`.` for core, `./rich-inline` for inline rich text) and is `sideEffects: false` — modern bundlers tree-shake unused entrypoints.
 
 ## When Pretext Is the Right Tool
 
@@ -24,6 +30,7 @@ Use Pretext when the developer needs to:
 - **Auto-fit text to a container** — find the largest font size that keeps text within N lines (CSS has no equivalent)
 - **Flow text around obstacles** — magazine-style layouts where text wraps around shapes, images, or interactive elements
 - **Measure text in canvas/SVG/WebGL** — Pretext's measurements are exact for `fillText`
+- **Render rich inline text** — mentions, chips, code spans with browser-like boundary whitespace collapse, via the `@chenglou/pretext/rich-inline` subpath
 - **Measure many text items fast** — each `layout()` call is ~0.0002ms after the first `prepare()` per font
 
 ## When NOT to Use Pretext
@@ -95,85 +102,141 @@ Pretext measures using currently loaded fonts. If you measure before web fonts l
 
 On macOS, Canvas resolves `system-ui` to a different optical variant than DOM rendering. Use explicit font names for guaranteed accuracy.
 
-### 6. No Canvas = No Pretext
+### 6. No Canvas + No Intl.Segmenter = No Pretext
 
-Pretext requires `CanvasRenderingContext2D.measureText`. It works in all browsers and `OffscreenCanvas` workers, but NOT in Node.js without `node-canvas`.
+Pretext requires both `CanvasRenderingContext2D.measureText` AND `Intl.Segmenter` at runtime. It works in all modern browsers (2021+) and `OffscreenCanvas` workers. Node 16+ has `Intl.Segmenter` but no native Canvas 2D — `node-canvas` works for measurement but accuracy is not guaranteed across fonts. Server-side rendering is on the upstream roadmap but not shipped yet.
 
 ### 7. Border in Height Estimates
 
 When computing DOM element heights, don't forget `border-width`. A 1px border adds 2px total (top + bottom). Easy to miss, causes cumulative drift in layouts.
 
+### 8. Empty String Returns `{ lineCount: 0, height: 0 }`
+
+`layout()` with an empty string returns zero height. Browsers still size an empty block to one `line-height`, so if you want browser-parity behavior, clamp it:
+
+```js
+const { lineCount, height } = layout(prepared, width, lineHeightPx);
+const browserHeight = Math.max(1, lineCount) * lineHeightPx;
+```
+
+This catches you on empty placeholders, optimistic UI before content loads, and textarea auto-grow.
+
+### 9. letterSpacing Is a CSS Pixel Number, Not em/Percent
+
+When you pass `{ letterSpacing: n }` to `prepare()` / `prepareWithSegments()`, `n` is treated as a CSS pixel value. CSS itself allows `letter-spacing: 0.05em` or `letter-spacing: 5%`, but Pretext only takes numeric pixels. Convert before passing:
+
+```js
+// CSS: letter-spacing: 0.05em on 16px font
+const letterSpacingPx = 16 * 0.05; // = 0.8
+prepare(text, '16px Inter', { letterSpacing: letterSpacingPx });
+```
+
+If you pass an em or percent value as a number, measurements drift silently.
+
+### 10. Rich-Inline Parameter Order Is Swapped vs Core
+
+`layoutNextRichInlineLineRange` has its `start` cursor and `maxWidth` in the **opposite order** from `layoutNextLine`. A developer who copies the core call into the rich-inline path will silently misalign arguments. See [Rich Inline API](references/api.md#rich-inline) for the side-by-side signatures.
+
 ## Which API Do I Need?
 
 Start here. Match the developer's goal to the right API path — this avoids the most common mistake (using `prepare` when `prepareWithSegments` is needed, or vice versa).
 
+**Decision tree:** Need per-line text content (the actual strings)? → Manual / rich layout rows. Need only geometry (height, widths, line counts)? → Core layout rows. Need mentions/chips/code spans inline? → Rich Inline row.
+
 | Developer wants to... | prepare variant | layout function |
 |---|---|---|
+| **Core layout** | | |
 | Get text height/line count at a given width | `prepare` | `layout` |
 | Auto-fit font size (binary search over sizes) | `prepare` (in a loop) | `layout` |
 | Auto-height a textarea | `prepare` with `{ whiteSpace: 'pre-wrap' }` | `layout` |
+| ─────────────── | | |
+| **Manual / rich layout** | | |
 | Get per-line text content (render, animate) | `prepareWithSegments` | `layoutWithLines` |
-| Find widest line (shrink-wrap containers) | `prepareWithSegments` | `walkLineRanges` |
+| Find widest line (shrink-wrap containers) | `prepareWithSegments` | `measureLineStats` or `walkLineRanges` |
+| Get line count + widest in one call, no strings | `prepareWithSegments` | `measureLineStats` |
 | Flow text around obstacles (variable width/line) | `prepareWithSegments` | `layoutNextLine` in a loop |
+| Variable widths, no string allocation (virtualization) | `prepareWithSegments` | `layoutNextLineRange` + lazy `materializeLineRange` |
+| Get intrinsic/widest forced line (hard breaks only) | `prepareWithSegments` | `measureNaturalWidth` |
+| Render mentions, chips, code spans inline | `prepareRichInline` (from `/rich-inline`) | `walkRichInlineLineRanges` / `layoutNextRichInlineLineRange` |
 
-**The key decision is `prepare` vs `prepareWithSegments`:**
+**The key decision is `prepare` vs `prepareWithSegments` vs `prepareRichInline`:**
 - `prepare` → only gives you `layout()` (height + line count). Fastest path.
-- `prepareWithSegments` → gives you ALL layout functions including `layout()`. Use this the moment you need per-line data or variable widths. There is no reason to call both for the same text.
+- `prepareWithSegments` → gives you ALL core layout functions including `layout()`. Use this the moment you need per-line data, variable widths, or geometry without strings. There is no reason to call both for the same text.
+- `prepareRichInline` (from `@chenglou/pretext/rich-inline`) → its own prepare path for arrays of mixed-font items. Not interchangeable with the core handles.
+
+`prepare` and `prepareWithSegments` both accept `{ whiteSpace, wordBreak, letterSpacing }` as a third argument. `wordBreak: 'keep-all'` is the CSS-equivalent for CJK/Hangul. `letterSpacing` is a CSS pixel number (see gotcha #9). `prepareRichInline` is different — it takes only the items array; per-item `letterSpacing` and `break` live inside each item.
 
 Common API selection mistakes:
 - Using `prepare` then calling `layoutWithLines` → crashes at runtime (no `.segments`)
-- Using `layoutWithLines` when only widths are needed → `walkLineRanges` is cheaper (no string allocation)
-- Using `layoutWithLines` when width varies per line → must use `layoutNextLine` instead
+- Using `layoutWithLines` when only widths are needed → `walkLineRanges` or `measureLineStats` is cheaper (no string allocation)
+- Using `layoutWithLines` when width varies per line → must use `layoutNextLine` (or `layoutNextLineRange`) instead
+- Using `measureNaturalWidth` for shrink-wrap of soft-wrapping text → it returns the widest **forced** line (hard breaks only); use `measureLineStats` / `walkLineRanges` for soft-wrap shrink-wrap
 - Re-calling `prepare` on container resize → just call `layout` again with the new width (it's pure arithmetic)
 
-For full signatures, types, and examples, see the [API Reference](references/api.md).
+For full signatures, types, and examples, see the [API Reference](references/api.md). For rich inline specifically, jump to [Rich Inline](references/api.md#rich-inline).
 
 ## Integration Patterns
 
-For detailed code examples of each pattern, see [Patterns Reference](references/patterns.md). Here's when to reach for each:
+For detailed code examples of each pattern, see the [Patterns Reference](references/patterns.md). Here's when to reach for each:
 
 ### Wrapper Module (Recommended First Step)
-Create a thin wrapper that converts lineHeight from CSS multiplier to pixels and returns `null` on failure. This prevents the critical lineHeight bug and enables progressive enhancement.
+Create a thin wrapper that converts lineHeight from CSS multiplier to pixels and returns `null` on failure. This prevents the critical lineHeight bug and enables progressive enhancement. An [extended variant](references/patterns.md#wrapper-module) supports `wordBreak`/`letterSpacing` for CJK or spaced-out type.
 
 ### Auto-Fit Font Size
 Binary search for the largest font that keeps text within N lines. **This is Pretext's killer feature** — CSS has no equivalent. Use for hero headlines, card titles, quote displays.
 
 ### Height Estimation for Card Layouts
-Measure variable text parts with Pretext, add fixed parts (padding, border, gaps) manually. Good for simple cards. Remember: this is inherently approximate — don't use for pixel-perfect virtualization.
+Measure variable text parts with Pretext, add fixed parts (padding, border, gaps) manually. Good for simple cards. When you only need lineCount or widest-line numbers (not actual height in px), `measureLineStats` is cheaper than `layoutWithLines`. Remember: this is inherently approximate — don't use for pixel-perfect virtualization.
 
-### Text Around Obstacles (layoutNextLine)
-The creative powerhouse. Feed a different `maxWidth` per line based on obstacle position. This enables magazine layouts, text flowing around images, and all the impressive community demos.
+### Text Around Obstacles (layoutNextLine / layoutNextLineRange)
+The creative powerhouse. Feed a different `maxWidth` per line based on obstacle position. This enables magazine layouts, text flowing around images, and all the impressive community demos. For virtualization or hit-testing where you don't need the rendered text yet, `layoutNextLineRange` + lazy `materializeLineRange` avoids the per-line string allocation.
+
+### Rich Inline Text (Mentions, Chips, Code Spans)
+Use the `@chenglou/pretext/rich-inline` subpath when items have mixed fonts AND some items must stay atomic (chip pills with rounded chrome that can't break mid-name). Pretext handles browser-like boundary whitespace collapse so your `@maya` mention sits flush against surrounding text the way CSS inline rendering would. See the [Rich Inline pattern](references/patterns.md#rich-inline-text).
+
+### Shrink-Wrap Without String Allocation
+For chat bubbles, balloon containers, or any "tightest box around this text" UI, use `measureLineStats` (single call returning `{ lineCount, maxLineWidth }`) instead of running `layoutWithLines` and inspecting strings. Pretext skips the string-construction step entirely.
+
+### Balanced / Justified Layout (Knuth-Plass)
+The upstream package ships a `justification-comparison` demo showing Knuth-Plass-style paragraph layout next to greedy hyphenation and native CSS justification. Use the same line-walking primitives (`walkLineRanges` / `layoutNextLineRange`) plus a width-balancing pass for paragraphs that need even raggedness or proper justification. See the [Balanced layout pattern](references/patterns.md#balanced-layout).
 
 ### Progressive Enhancement
 Always load Pretext as enhancement — the page should work without it. Use `type="module"` as a natural feature gate.
 
 ### Vendoring (No Build Step)
-If you don't use a bundler, bundle Pretext into a single ESM file with esbuild first. It ships as multiple ES modules with relative imports that won't work standalone.
+Modern bundlers handle Pretext natively — proper ESM exports, `sideEffects: false`, subpath exports. Reach for the [vendoring recipe](references/patterns.md#vendoring-without-a-bundler) only when you can't run a bundler at all.
 
 ## Creative Demos & Advanced Patterns
 
-The [Patterns Reference](references/patterns.md) also covers creative patterns from the community:
+The npm package now ships its own demos under `pages/demos/` — clone the repo and run `bun start` to play with them locally. They are the canonical reference for the patterns below, and they're versioned with the package so they always reflect the current API:
 
-- **Fluid ASCII art** — full-screen fluid sim rendered as proportional ASCII characters
-- **3D wireframe text** — torus/sphere drawn through a character grid
-- **Text-based games** — brick-breaker built entirely with Pretext text
-- **Splat editor** — text wrapping around 3D objects in real time
-- **Dragon text reflow** — text flowing around a moving 80-segment dragon
-- **Accessible editorial engine** — WCAG-compliant magazine layout
+- **`accordion`** — Pretext-predicted heights for smooth expand/collapse with no layout thrashing
+- **`bubbles`** — multiline chat bubbles that shrink-wrap to their longest line
+- **`masonry`** — virtualized masonry using exact pre-measured heights
+- **`dynamic-layout`** — variable-width manual layout (live obstacle routing)
+- **`editorial-engine`** — accessible magazine-style multi-column spread with obstacle-aware title routing
+- **`justification-comparison`** — Knuth-Plass paragraph layout side-by-side with greedy hyphenation and native CSS justification
+- **`markdown-chat`** — virtualized chat with rich-inline + Markdown parsing (canonical streaming-chat reference)
+- **`rich-note`** — rich inline notes with mentions and chips
+- **`variable-typographic-ascii`** — particle-driven ASCII art using proportional glyph measurements
 
-All use the same core API (`prepare` + `layout` / `layoutNextLine`) — the difference is how creatively you use obstacle-aware line routing and per-frame reflow.
+The community showcase has 70+ more creative uses (fluid simulations, 3D text, games, dragon-shaped reflows). All use the same core API — the difference is how creatively you compute widths and route lines.
+
+See the [Patterns Reference](references/patterns.md) for code-level walkthroughs of the recurring idioms.
 
 ## Performance Notes
 
-- First `prepare()` per font: ~1-5ms (measures character segments)
-- Subsequent `prepare()` with same font: fast (cached segments)
-- Each `layout()` call: ~0.0002ms (pure arithmetic)
-- 500 texts: ~19ms prepare, ~0.09ms layout
-- Safe to call in `requestAnimationFrame`, scroll handlers, workers
+The two functions have very different cost profiles. Confusing them is the root cause of the streaming-chat anti-pattern.
+
+- **`prepare()` is O(N) in the input text length.** Each call re-runs the Unicode segmenter and walks every segment. First call per font also measures character widths (~1–5ms). Subsequent calls with the **same font** reuse the per-font segment-width cache, but the segmentation work still scales with the text. **Don't re-prepare the same growing text every frame.**
+- **`layout()` is ~0.0002ms.** Pure arithmetic over a prepared handle. This is what's safe to call in `requestAnimationFrame`, scroll handlers, and workers — call it on every resize tick, not `prepare()`.
+- Typical batch cost: 500 different texts in the same font ≈ 19ms total prepare, 0.09ms per layout.
+- For streaming AI chat (text that grows token-by-token), see the tiered guidance at [Streaming AI Chat](references/patterns.md#streaming-ai-chat) — re-preparing every token is O(N²) across the stream and burns CPU on long messages.
 
 ## Key Resources
 
 - GitHub: https://github.com/chenglou/pretext
-- Official demos: https://chenglou.me/pretext/
+- Official demos: https://chenglou.me/pretext/ — also ship inside the npm package under `pages/demos/` (clone + `bun start`)
 - Community showcase (70+ projects): https://pretextwall.xyz/
 - Curated collection: https://www.pretext.cool/
+- Additional community demos: https://somnai-dreams.github.io/pretext-demos/

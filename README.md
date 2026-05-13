@@ -12,7 +12,7 @@
 [![Cursor Plugin](https://img.shields.io/badge/Cursor-plugin-00D886)](https://cursor.com/docs/plugins)
 [![Built with Skill Creator Plus](https://img.shields.io/badge/Built_with-Skill_Creator_Plus-4ecdc4?style=flat-square)](https://github.com/yaniv-golan/skill-creator-plus)
 
-An AI agent skill that helps developers use **[@chenglou/pretext](https://github.com/chenglou/pretext)** — the 15KB TypeScript library that computes exact text metrics without DOM reflows.
+An AI agent skill that helps developers use **[@chenglou/pretext](https://github.com/chenglou/pretext)** — a small, tree-shakable TypeScript library that computes exact text metrics without DOM reflows.
 
 Uses the open [Agent Skills](https://agentskills.io) standard. Works with Claude Desktop, Claude Cowork, Claude Code, Codex CLI, Cursor, Windsurf, Manus, ChatGPT, and any other compatible tool.
 
@@ -20,11 +20,11 @@ Uses the open [Agent Skills](https://agentskills.io) standard. Works with Claude
 
 Pretext computes exact text dimensions using pure math — no DOM reflows. This skill teaches AI agents how to use it correctly, covering:
 
-- **API usage** — all 8 exported functions with correct argument order and types
-- **Critical gotchas** — the lineHeight-must-be-pixels bug, argument order, font loading timing
-- **Integration patterns** — wrapper modules, auto-fit font size, height estimation, text around obstacles
-- **Creative patterns** — ASCII art, editorial layouts, shrink-wrap chat bubbles, 3D text wrapping, streaming AI chat
-- **When NOT to use Pretext** — CSS-only solutions, HTML content, fragile virtualizer integrations
+- **API usage** — all 13 core functions plus the 5 functions in `@chenglou/pretext/rich-inline`, with correct argument order, types, and parameter-order asymmetries
+- **Critical gotchas** — the lineHeight-must-be-pixels bug, argument order, font loading timing, ESM-only packaging, parameter-order swap between core and rich-inline
+- **Integration patterns** — wrapper modules, auto-fit font size, height estimation, text around obstacles with and without string allocation, rich inline runs with chips/mentions, shrink-wrap chat bubbles
+- **Creative patterns** — editorial layouts, balanced/Knuth-Plass paragraphs, streaming AI chat (with honest cost notes), framework-integration idioms (React/Vue/Svelte)
+- **When NOT to use Pretext** — CSS-only solutions, HTML content, fragile virtualizer integrations, per-token streaming over very long messages
 
 ## Installation
 
@@ -128,12 +128,13 @@ Help me flow text around a circular image using layoutNextLine
 
 ## What Pretext Is
 
-[Pretext](https://github.com/chenglou/pretext) is a 15KB TypeScript library by Cheng Lou. It uses `CanvasRenderingContext2D.measureText` internally, segments text, measures once, caches, then does arithmetic for all subsequent layouts. Each `layout()` call is ~0.0002ms — safe to call every animation frame.
+[Pretext](https://github.com/chenglou/pretext) is a small, tree-shakable TypeScript library by Cheng Lou. It uses `CanvasRenderingContext2D.measureText` internally, segments text, measures once, caches, then does arithmetic for all subsequent layouts. Each `layout()` call is ~0.0002ms — safe to call every animation frame.
 
 **Key capabilities:**
 - Know text dimensions before rendering (virtual scrolling, masonry layouts)
 - Auto-fit text to a container (find largest font that fits N lines)
 - Flow text around obstacles (magazine-style layouts)
+- Render rich inline text — mentions, chips, code spans — via the `@chenglou/pretext/rich-inline` subpath
 - Measure text in canvas/SVG/WebGL
 
 ## License
