@@ -9,13 +9,15 @@ Proven patterns for using Pretext in real projects, from simple measurement to c
 3. [Height Estimation for Cards](#height-estimation-for-cards)
 4. [Text Around Obstacles](#text-around-obstacles)
 5. [Rich Inline Text](#rich-inline-text)
-6. [Progressive Enhancement](#progressive-enhancement)
-7. [Vendoring Without a Bundler](#vendoring-without-a-bundler)
-8. [Animation Patterns](#animation-patterns)
-9. [Streaming AI Chat](#streaming-ai-chat)
-10. [Framework Integration Idiom](#framework-integration-idiom)
-11. [Balanced Layout (Knuth-Plass)](#balanced-layout)
-12. [Creative Demo Patterns](#creative-demo-patterns)
+6. [Rendering Per-Line in SVG](#rendering-per-line-in-svg)
+7. [Progressive Enhancement](#progressive-enhancement)
+8. [Vendoring Without a Bundler](#vendoring-without-a-bundler)
+9. [Animation Patterns](#animation-patterns)
+10. [Streaming AI Chat](#streaming-ai-chat)
+11. [Framework Integration Idiom](#framework-integration-idiom)
+12. [Iterative Width Search](#iterative-width-search)
+13. [Balanced Layout (Knuth-Plass)](#balanced-layout)
+14. [Creative Demo Patterns](#creative-demo-patterns)
 
 ---
 
@@ -349,6 +351,54 @@ Canonical reference: `pages/demos/markdown-chat.ts` and `pages/demos/rich-note.t
 
 ---
 
+## Rendering Per-Line in SVG
+
+`layoutWithLines` returns the actual wrapped line strings. To draw them in SVG with pixel-perfect match to what was measured — and to avoid the wrap-point mismatch documented in SKILL.md gotcha #12 — render each line as a `<tspan>` with explicit `x` and a `dy` shift.
+
+```js
+import { prepareWithSegments, layoutWithLines } from '@chenglou/pretext';
+
+const fontSize = 14;
+const lineHeightPx = fontSize * 1.2;
+const fontStr = `700 ${fontSize}px Helvetica, Arial, sans-serif`;
+const renderText = text.toUpperCase();           // measure what you render (gotcha #11)
+
+const prepared = prepareWithSegments(renderText, fontStr);
+const { lines, height } = layoutWithLines(prepared, maxWidth, lineHeightPx);
+
+// In SVG: first baseline ~0.85 * fontSize below the rect's top edge for a
+// reasonable cap-line approximation. For exact alignment, use
+// dominant-baseline="text-before-edge" (top-aligned) instead.
+const cx = textRectX + maxWidth / 2;
+const firstBaselineY = textRectY + fontSize * 0.85;
+const escape = (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]);
+const tspans = lines
+  .map((line, i) => {
+    const safe = line.replace(/[<>&]/g, escape);
+    const dy = i === 0 ? 0 : lineHeightPx;
+    return `<tspan x="${cx}" dy="${dy}">${safe}</tspan>`;
+  })
+  .join('');
+
+const svg = `
+  <text x="${cx}" y="${firstBaselineY}" text-anchor="middle"
+        font-family="Helvetica, Arial, sans-serif" font-size="${fontSize}" font-weight="700">
+    ${tspans}
+  </text>`;
+```
+
+**Three subtleties:**
+
+1. **Reset `x` on every tspan.** Without it, tspans stack horizontally (continuing on the same baseline), not as new lines.
+2. **`text-anchor="middle"` centers each tspan independently** around its `x`. Each rendered line will be centered.
+3. **Baseline placement varies by font.** `fontSize * 0.85` gives a reasonable cap-line approximation for sans-serif at typical sizes. For exact pixel alignment, use `dominant-baseline="text-before-edge"` (top-aligned) or `dominant-baseline="middle"` and adjust `y` accordingly.
+
+When you also need shrink-wrap (a container that hugs the longest rendered line, not maxWidth), pair this with `measureLineStats` from the [Shrink-Wrap Chat Bubbles](#shrink-wrap-chat-bubbles-no-string-allocation) pattern: one call returns `{ lineCount, maxLineWidth }`, then a second `layoutWithLines` materializes the lines for the `<tspan>` pass.
+
+`<foreignObject>` with `max-width` is the alternative, but it falls into the trap of gotcha #12 — CSS may break differently than pretext did. Per-`<tspan>` rendering with pretext's break points is the pixel-perfect path.
+
+---
+
 ## Progressive Enhancement
 
 Always load Pretext as enhancement — the page should work without it.
@@ -626,6 +676,60 @@ $effect(() => {
 `$state.raw` is the Svelte equivalent — no reactive proxying around an opaque handle.
 
 The common idiom: prepare once per `(text, font, options)` triple, observe size with `ResizeObserver`, call `layout()` inside the observer callback. `layout()` is pure arithmetic (~0.0002ms), so there's no performance cost to recomputing on every resize tick.
+
+---
+
+## Iterative Width Search
+
+Any algorithm that searches for an optimal `maxWidth` (or font size, or line count) shares the same shape: **prepare once, layout many times.** Re-preparing inside the loop turns an O(log W) search into O(N × log W) — usually a visible UI hang on long text.
+
+```js
+import { prepareWithSegments, layout } from '@chenglou/pretext';
+
+function searchOptimalWidth(text, font, lineHeightPx, opts) {
+  // PREPARE ONCE — outside the loop
+  const prepared = prepareWithSegments(text, font);
+
+  let lo = opts.minWidth, hi = opts.maxWidth;
+  let best = layout(prepared, hi, lineHeightPx);
+  while (lo < hi - 1) {
+    const mid = (lo + hi) >> 1;
+    // layout() reuses the prepared handle — pure arithmetic
+    const r = layout(prepared, mid, lineHeightPx);
+    if (opts.accept(r)) {
+      hi = mid;
+      best = r;
+    } else {
+      lo = mid;
+    }
+  }
+  return best;
+}
+```
+
+**Anti-pattern** — calls `prepare()` inside the loop, multiplies cost by the iteration count:
+
+```js
+function badSearchOptimalWidth(text, font, lineHeightPx, opts) {
+  let lo = opts.minWidth, hi = opts.maxWidth;
+  while (lo < hi - 1) {
+    const mid = (lo + hi) >> 1;
+    const prepared = prepareWithSegments(text, font);  // ← O(N) per iteration
+    const r = layout(prepared, mid, lineHeightPx);
+    // ...
+  }
+}
+```
+
+Real-world cost: a "shrink-wrap balanced" driver re-preparing on each of ~10 binary-search iterations across 5 balloons can hang for 60 seconds on long text. With prepare hoisted out, the same workload is sub-millisecond.
+
+This applies to:
+- Shrink-wrap balanced (find narrowest width that keeps an aspect ratio under target)
+- [Auto-fit font size](#auto-fit-font-size) (binary-search font-size that keeps text within N lines — note: this one *must* re-prepare per font size, but only once per size, not per width)
+- Multi-pass paragraph balancing ([Knuth-Plass](#balanced-layout) demerit iteration)
+- Any "try width × scoring function" optimization
+
+Use `measureLineStats` instead of `layoutWithLines` when you don't need the actual line strings inside the loop — skips the string-allocation step. Materialize lines only after the search converges.
 
 ---
 

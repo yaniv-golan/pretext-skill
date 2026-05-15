@@ -1,6 +1,6 @@
 {
   "name": "pretext",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "AI skill for @chenglou/pretext — a small, tree-shakable TypeScript text measurement library that computes exact text metrics without DOM reflows",
   "author": {
     "name": "Yaniv Golan",

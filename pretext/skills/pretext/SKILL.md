@@ -16,7 +16,7 @@ description: >-
 license: MIT
 metadata:
   author: Yaniv Golan
-  version: "0.2.0"
+  version: "0.2.1"
 ---
 
 # Pretext Integration Guide
@@ -137,6 +137,43 @@ If you pass an em or percent value as a number, measurements drift silently.
 
 `layoutNextRichInlineLineRange` has its `start` cursor and `maxWidth` in the **opposite order** from `layoutNextLine`. A developer who copies the core call into the rich-inline path will silently misalign arguments. See [Rich Inline API](references/api.md#rich-inline) for the side-by-side signatures.
 
+### 11. Measure the EXACT String That Will Be Rendered
+
+Pretext doesn't know about CSS transforms or post-measurement string ops. If your render pipeline applies any of these BEFORE drawing, apply them BEFORE `prepare()`:
+
+- `text-transform: uppercase` / `lowercase` / `capitalize` (uppercase letters are noticeably wider — ~10–15% in most fonts)
+- `.toUpperCase()` / `.toLowerCase()` / `.normalize()` in JS
+- Smart-quote or ligature substitution
+- Number/symbol mapping (e.g. fraction characters)
+
+```js
+// WRONG — measures mixed-case, will render uppercase, overflow
+const prepared = prepare(text, font);
+const r = layout(prepared, w, lh);
+ctx.fillText(text.toUpperCase(), 0, 0);  // ← rendered is wider than r predicts
+
+// CORRECT — measure what you'll render
+const renderText = text.toUpperCase();
+const prepared = prepare(renderText, font);
+const r = layout(prepared, w, lh);
+ctx.fillText(renderText, 0, 0);
+```
+
+Common case: comic lettering (all dialogue uppercase), display headlines, button labels with caps transforms. Symptom: containers sized "tightly" overflow at corners.
+
+### 12. Don't Measure With Pretext and Wrap With CSS
+
+If pretext measures `text` at `maxWidth` and reports `lineCount: 3`, then you render the text in a `<div style="max-width: ...">` or SVG `<foreignObject>` and let CSS do the wrapping, the CSS may break to 3 lines OR to 4 — the rules differ on hyphenation, soft-hyphens, kerning thresholds, and fallback-font width.
+
+Either:
+
+1. **Render per pretext's break points.** Use `prepareWithSegments` + `layoutWithLines` (or `layoutNextLine`) to get the actual line strings, render each line as its own element (`<tspan>`, `<div>`, `<text>` per line). Pixel-perfect match. See [Rendering Per-Line in SVG](references/patterns.md#rendering-per-line-in-svg).
+2. **Don't use pretext for wrap.** Let CSS handle measurement AND rendering (use `getBoundingClientRect` after the DOM lays out).
+
+Mixing measurement modes is the silent-overflow bug. Symptom: a balloon/box sized correctly for 3 lines actually renders 4, last line sticks out the bottom.
+
+Gotchas #11 and #12 share a theme with the streaming-chat anti-pattern: **anything you do AFTER pretext returns its result invalidates the result.** Keep the measured input and the rendered output identical.
+
 ## Which API Do I Need?
 
 Start here. Match the developer's goal to the right API path — this avoids the most common mistake (using `prepare` when `prepareWithSegments` is needed, or vice versa).
@@ -183,7 +220,7 @@ For detailed code examples of each pattern, see the [Patterns Reference](referen
 Create a thin wrapper that converts lineHeight from CSS multiplier to pixels and returns `null` on failure. This prevents the critical lineHeight bug and enables progressive enhancement. An [extended variant](references/patterns.md#wrapper-module) supports `wordBreak`/`letterSpacing` for CJK or spaced-out type.
 
 ### Auto-Fit Font Size
-Binary search for the largest font that keeps text within N lines. **This is Pretext's killer feature** — CSS has no equivalent. Use for hero headlines, card titles, quote displays.
+Binary search for the largest font that keeps text within N lines. **This is Pretext's killer feature** — CSS has no equivalent. Use for hero headlines, card titles, quote displays. Shares its prepare-once-layout-many shape with all [iterative width searches](references/patterns.md#iterative-width-search) — re-preparing inside the loop is the most common performance bug.
 
 ### Height Estimation for Card Layouts
 Measure variable text parts with Pretext, add fixed parts (padding, border, gaps) manually. Good for simple cards. When you only need lineCount or widest-line numbers (not actual height in px), `measureLineStats` is cheaper than `layoutWithLines`. Remember: this is inherently approximate — don't use for pixel-perfect virtualization.
@@ -196,6 +233,9 @@ Use the `@chenglou/pretext/rich-inline` subpath when items have mixed fonts AND 
 
 ### Shrink-Wrap Without String Allocation
 For chat bubbles, balloon containers, or any "tightest box around this text" UI, use `measureLineStats` (single call returning `{ lineCount, maxLineWidth }`) instead of running `layoutWithLines` and inspecting strings. Pretext skips the string-construction step entirely.
+
+### Rendering Per-Line in SVG
+When the surface is SVG (speech balloons, badges, posters) and you want pixel-perfect alignment between what was measured and what's drawn, render each line as its own `<tspan>` with explicit `x` reset and a `dy` shift — don't rely on `<foreignObject>` + CSS wrap (see gotcha #12). See the [SVG per-line pattern](references/patterns.md#rendering-per-line-in-svg).
 
 ### Balanced / Justified Layout (Knuth-Plass)
 The upstream package ships a `justification-comparison` demo showing Knuth-Plass-style paragraph layout next to greedy hyphenation and native CSS justification. Use the same line-walking primitives (`walkLineRanges` / `layoutNextLineRange`) plus a width-balancing pass for paragraphs that need even raggedness or proper justification. See the [Balanced layout pattern](references/patterns.md#balanced-layout).
@@ -229,6 +269,7 @@ See the [Patterns Reference](references/patterns.md) for code-level walkthroughs
 The two functions have very different cost profiles. Confusing them is the root cause of the streaming-chat anti-pattern.
 
 - **`prepare()` is O(N) in the input text length.** Each call re-runs the Unicode segmenter and walks every segment. First call per font also measures character widths (~1–5ms). Subsequent calls with the **same font** reuse the per-font segment-width cache, but the segmentation work still scales with the text. **Don't re-prepare the same growing text every frame.**
+- **Factor `prepare()` OUT of any iterative-width search.** Patterns like balanced shrink-wrap, auto-fit, and balanced-paragraph layout binary-search the maxWidth (or font size, or target line count). Each iteration must call `layout()` / `measureLineStats` / `walkLineRanges` on an already-prepared handle — NOT call `prepare()` again. Re-preparing inside the loop multiplies cost by the iteration count and produces visible UI hangs on long text. See [Iterative Width Search](references/patterns.md#iterative-width-search) for the correct shape.
 - **`layout()` is ~0.0002ms.** Pure arithmetic over a prepared handle. This is what's safe to call in `requestAnimationFrame`, scroll handlers, and workers — call it on every resize tick, not `prepare()`.
 - Typical batch cost: 500 different texts in the same font ≈ 19ms total prepare, 0.09ms per layout.
 - For streaming AI chat (text that grows token-by-token), see the tiered guidance at [Streaming AI Chat](references/patterns.md#streaming-ai-chat) — re-preparing every token is O(N²) across the stream and burns CPU on long messages.

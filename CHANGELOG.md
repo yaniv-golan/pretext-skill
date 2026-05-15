@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Note: this file is the *technical* changelog for contributors — the GitHub Releases page may show user-facing release notes that summarize the same release differently.
 
+## [0.2.1] - 2026-05-15
+
+Field-test patch from a comic-book speech-balloon renderer built against the v0.2.0 skill. No API changes — documentation only. Four gaps found in real-world R&D, all in the "measure-vs-render consistency" theme.
+
+### Added
+- **Gotcha #11 — Measure the EXACT String That Will Be Rendered.** Calls out `text-transform: uppercase`, `.toUpperCase()`, smart-quote substitution, and other post-measurement string ops as silent overflow sources. Uppercase letters can be 10–15% wider than mixed case
+- **Gotcha #12 — Don't Measure With Pretext and Wrap With CSS.** Documents the silent-overflow bug when pretext measures break points but CSS (`<foreignObject>`, `max-width` containers) does the actual wrapping. Two correct paths: render per pretext break points, or let CSS own both measurement and rendering
+- **New pattern: Rendering Per-Line in SVG** (`references/patterns.md`). Drawing pretext's wrapped lines as `<tspan>` elements with `x` reset and `dy` shift, with notes on `text-anchor` and baseline placement
+- **New pattern: Iterative Width Search** (`references/patterns.md`). The "prepare once, layout many" shape shared by shrink-wrap balanced, auto-fit, and Knuth-Plass — plus the explicit anti-pattern of re-preparing inside the search loop (10× iterations × 5 containers can hang for ~60 seconds on long text)
+- **Performance Notes warning** in `SKILL.md` — explicit "factor `prepare()` OUT of any iterative-width search" callout linking to the new pattern section
+- Cross-link from Auto-Fit Font Size pattern to Iterative Width Search (same shape)
+- Cross-link from Shrink-Wrap pattern to Rendering Per-Line in SVG
+
+### Notes
+- Editorial theme: gotchas #11, #12 and the iterative-search warning all share the shape "anything you do AFTER pretext returns its result invalidates the result" — the same family as the streaming-chat anti-pattern from v0.2.0. Closing note at the end of gotcha #12 surfaces this connection
+- All patterns and gotchas remain consistent with `@chenglou/pretext` v0.0.7
+
 ## [0.2.0] - 2026-05-13
 
 This release updates the skill to cover `@chenglou/pretext` v0.0.7 (published 2026-05-10), six upstream releases beyond what 0.1.0 documented. The skill now describes the full 18-function public surface (13 from the main entry + 5 from the new `@chenglou/pretext/rich-inline` subpath).
