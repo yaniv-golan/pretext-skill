@@ -1,6 +1,6 @@
 # Pretext Integration & Creative Patterns
 
-Proven patterns for using Pretext in real projects, from simple measurement to creative demos. Patterns reflect `@chenglou/pretext` v0.0.7.
+Proven patterns for using Pretext in real projects, from simple measurement to creative demos. Patterns reflect `@chenglou/pretext` v0.0.8 (API-identical to v0.0.7; v0.0.8 is a line-breaking-accuracy and tooling patch).
 
 ## Table of Contents
 

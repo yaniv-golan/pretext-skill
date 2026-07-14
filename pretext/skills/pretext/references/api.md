@@ -1,6 +1,6 @@
 # Pretext API Reference
 
-Complete API reference for `@chenglou/pretext`. API reflects v0.0.7 (published 2026-05-10). For newer entries, check the upstream [CHANGELOG](https://github.com/chenglou/pretext/blob/main/CHANGELOG.md).
+Complete API reference for `@chenglou/pretext`. API reflects v0.0.8 (published 2026-06-12). The public surface is unchanged from v0.0.7 — v0.0.8 added declaration maps and two line-breaking accuracy fixes (symbol runs and overlong hyphenated runs now break closer to browsers). For newer entries, check the upstream [CHANGELOG](https://github.com/chenglou/pretext/blob/main/CHANGELOG.md).
 
 The package exports 13 functions from the main entry plus 5 from `@chenglou/pretext/rich-inline` (18 total).
 

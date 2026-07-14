@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Note: this file is the *technical* changelog for contributors — the GitHub Releases page may show user-facing release notes that summarize the same release differently.
 
+## [0.2.2] - 2026-07-14
+
+Version-coverage bump to track `@chenglou/pretext` v0.0.8 (published 2026-06-12), one upstream release beyond the v0.0.7 covered by 0.2.0/0.2.1. **No public API change upstream** — the documented 18-function surface, options, and gotchas remain accurate. Documentation only.
+
+### Changed
+- `references/api.md` and `references/patterns.md` now state coverage of v0.0.8 and note that the public surface is identical to v0.0.7
+
+### Notes
+- Upstream v0.0.8 shipped two line-breaking **accuracy** fixes (no API surface change): word-internal keyboard/Unicode symbol runs now break like browsers (upstream #169), and overlong hyphenated runs now prefer browser-like dash breakpoints before falling back to emergency grapheme breaks (upstream #89). Neither changes how the skill's functions are called
+- v0.0.8 also began shipping declaration maps (go-to-definition lands on the shipped `.ts` source) — a DX/tooling improvement, not an API change
+- Exports unchanged: main entry `.` and `./rich-inline`, ESM-only, `sideEffects: false`
+- Watch item (not yet published): the upstream Unreleased section mentions unifying Safari soft-hyphen insertion-point behavior across `layout()`, rich-line, and streaming APIs — revisit when it ships
+
 ## [0.2.1] - 2026-05-15
 
 Field-test patch from a comic-book speech-balloon renderer built against the v0.2.0 skill. No API changes — documentation only. Four gaps found in real-world R&D, all in the "measure-vs-render consistency" theme.
