@@ -1,73 +1,78 @@
 # Pretext API Reference
 
-Complete API reference for `@chenglou/pretext`. API reflects v0.0.8 (published 2026-06-12). The public surface is unchanged from v0.0.7 — v0.0.8 added declaration maps and two line-breaking accuracy fixes (symbol runs and overlong hyphenated runs now break closer to browsers). For newer entries, check the upstream [CHANGELOG](https://github.com/chenglou/pretext/blob/main/CHANGELOG.md).
+API reflects v1.0.0 (2026-10-14). The main entry, `@chenglou/pretext`, exports the 12 functions below. The other 5 come from `@chenglou/pretext/rich-inline` and are in [rich-inline.md](rich-inline.md). Coming from an older Pretext, or reading code written for one? Start with [migration.md](migration.md).
 
-The package exports 13 functions from the main entry plus 5 from `@chenglou/pretext/rich-inline` (18 total).
+Signatures and types here are copied from the package's `dist/*.d.ts`. Upstream's [README](https://github.com/chenglou/pretext/blob/v1.0.0/README.md) and [CHANGELOG](https://github.com/chenglou/pretext/blob/v1.0.0/CHANGELOG.md) are the source for behaviour.
 
 ## Table of Contents
 
-### Core layout (main entry)
+**Measure height**
 
 1. [prepare](#prepare)
 2. [layout](#layout)
+
+**Lay out lines yourself**
+
 3. [prepareWithSegments](#preparewithsegments)
-4. [layoutWithLines](#layoutwithlines)
-5. [layoutNextLine](#layoutnextline)
-6. [layoutNextLineRange](#layoutnextlinerange)
-7. [materializeLineRange](#materializelinerange)
-8. [walkLineRanges](#walklineranges)
-9. [measureLineStats](#measurelinestats)
-10. [measureNaturalWidth](#measurenaturalwidth)
-11. [clearCache](#clearcache)
-12. [setLocale](#setlocale)
+4. [Prepared handle fields](#prepared-handle-fields)
+5. [layoutWithLines](#layoutwithlines)
+6. [layoutNextLine](#layoutnextline)
+7. [layoutNextLineRange](#layoutnextlinerange)
+8. [materializeLineRange](#materializelinerange)
+9. [walkLineRanges](#walklineranges)
+10. [measureLineStats](#measurelinestats)
+11. [measureNaturalWidth](#measurenaturalwidth)
 
-### Rich Inline (`@chenglou/pretext/rich-inline`)
+**Caches and language**
 
-13. [Rich Inline](#rich-inline) — `prepareRichInline`, `layoutNextRichInlineLineRange`, `walkRichInlineLineRanges`, `materializeRichInlineLineRange`, `measureRichInlineStats`
+12. [clearCache](#clearcache)
+13. [setLocale](#setlocale)
 
-### Reference
+**Reference**
 
 14. [Types](#types)
 15. [Language Support](#language-support)
-16. [Caveats & Quirks](#caveats--quirks)
+16. [Rich inline text](#rich-inline-text)
+
+Which handle each function takes:
+
+| Function | `prepare()` handle | `prepareWithSegments()` handle |
+|---|---|---|
+| `layout`, `walkLineRanges`, `measureLineStats`, `measureNaturalWidth`, `layoutNextLineRange` | Yes | Yes |
+| `layoutWithLines`, `layoutNextLine`, `materializeLineRange` (they return text) | No: a `TypeError` | Yes |
+
+How well the results match the page depends on the font, language, width and CSS you paint with: see [accuracy.md](accuracy.md).
 
 ---
 
 ## prepare
 
 ```typescript
-prepare(text: string, font: string, options?: PrepareOptions): PreparedText
+function prepare(text: string, font: string, options?: PrepareOptions): PreparedText
 ```
 
-Segments text using `Intl.Segmenter` following Unicode line-break rules, measures each segment's glyph width via Canvas `measureText()`, and caches results.
+Does the one-time work, as upstream's README puts it: normalizes whitespace, segments the text at its break opportunities, measures the segments with canvas, and returns an opaque handle. `layout()` is then cheap arithmetic over the cached widths. Don't call `prepare()` again for the same text, font and options. On resize, call only `layout()`.
 
 **Arguments:**
-- `text` (string) — the text to measure. **TEXT IS THE FIRST ARGUMENT.**
-- `font` (string) — CSS font shorthand: `"14px Georgia, serif"`, `"bold 16px Inter"`, etc. Must match the CSS `font` shorthand you'd assign to the element being measured.
-- `options` (optional):
-  - `whiteSpace`: `'normal'` (default) or `'pre-wrap'`. `'pre-wrap'` preserves ordinary spaces, tabs (`\t`), and hard breaks (`\n`) — use for textareas.
-  - `wordBreak`: `'normal'` (default) or `'keep-all'`. `'keep-all'` matches CSS `word-break: keep-all` for CJK/Hangul and mixed Latin/numeric/CJK runs without spaces.
-  - `letterSpacing`: number — CSS pixel value matching your CSS `letter-spacing`. **Pixels only, not em or percent** (see SKILL.md gotcha #9).
 
-**Returns:** An opaque `PreparedText` token (branded type). Cannot be inspected — pass it to `layout()`.
+- `text`: the exact string you will paint. **Text comes first, font second** (see SKILL.md gotcha #2).
+- `font`: a canvas font string, the same format as `ctx.font`, such as `'16px Inter'` or `'500 17px "Helvetica Neue"'`. Keep it in sync with the CSS of the element you paint. Sizes in px.
+- `options`:
+  - `whiteSpace`: `'normal'` (default) or `'pre-wrap'`. `'pre-wrap'` keeps ordinary spaces, `\t` tabs and `\n` hard breaks, as in a `<textarea>`.
+  - `wordBreak`: `'normal'` (default) or `'keep-all'`, for CSS `word-break: keep-all`.
+  - `letterSpacing`: CSS `letter-spacing` as a px number (see SKILL.md gotcha #9).
 
-**Caching behavior:** Segment metrics are cached per font string. Repeated `prepare()` calls with the same font reuse the cache, so measuring 100 different texts in the same font is fast after the first call. The cost of a single `prepare()` call still scales with the input text length (it re-runs the Unicode segmenter and walks all segments) — re-preparing a growing token stream every frame is O(N²). See patterns.md for the streaming-chat idiom.
+**Returns** a `PreparedText` handle. Its type is a brand with no readable fields. Pass it to `layout()` or to the four other functions that take one: `walkLineRanges()`, `measureLineStats()`, `measureNaturalWidth()` and `layoutNextLineRange()`.
 
-```js
-import { prepare } from '@chenglou/pretext';
+**Throws** a `RangeError` for a `font` that Canvas ignores, such as `''`, `'16px'` or `'Arial 16px'` (family first), and for a `letterSpacing` that isn't finite, such as `NaN`. Which fonts throw depends on the browser: see [accuracy.md](accuracy.md#fonts).
 
-const p1 = prepare('Hello world', '16px Inter');
-const p2 = prepare('Different text', '16px Inter'); // reuses font cache
-const p3 = prepare('Bold text', 'bold 16px Inter'); // different font = new cache entry
+**Cost.** Each call walks the whole text, so preparing a growing string over and over costs more each time. Measured segments are cached and shared between calls. Upstream's CHANGELOG ("Slower") notes that the first `prepare()` of text with long words costs more: a word 80px or wider gets a width for each of its letters, which Pretext uses to cut the word when a line is narrower than it (Chrome and Firefox cut such words this way, per the CHANGELOG). If you prepare labels with long words on a hot path, prepare them once beforehand, off that path.
 
-// Textarea auto-height with pre-wrap
-const taPrepared = prepare(textareaValue, '14px Inter', { whiteSpace: 'pre-wrap' });
-
-// CJK keep-all
-const cjkPrepared = prepare('春天到了', '16px Inter', { wordBreak: 'keep-all' });
-
-// Tracking-adjusted display text
-const tightPrepared = prepare('SHIPPING', '16px Inter', { letterSpacing: 1.5 });
+```ts
+const body = prepare('Hello world', '16px Inter')
+const note = prepare(textareaValue, '14px Inter', { whiteSpace: 'pre-wrap' })
+const korean = prepare('서울에서 만나요', '16px "Apple SD Gothic Neo"', { wordBreak: 'keep-all' })
+const tracked = prepare('SHIPPING', '600 12px Inter', { letterSpacing: 1.5 })
 ```
 
 ---
@@ -75,44 +80,42 @@ const tightPrepared = prepare('SHIPPING', '16px Inter', { letterSpacing: 1.5 });
 ## layout
 
 ```typescript
-layout(prepared: PreparedText, maxWidth: number, lineHeight: number): LayoutResult
+function layout(prepared: PreparedText, maxWidth: number, lineHeight: number): LayoutResult
 ```
 
-Computes line breaks and total height using pure arithmetic — no DOM access.
+Computes the line count and height at a width, with arithmetic only and no DOM access.
 
 **Arguments:**
-- `prepared` — token from `prepare()`
-- `maxWidth` (number) — available width in CSS pixels
-- `lineHeight` (number) — **ABSOLUTE CSS PIXELS, NOT A MULTIPLIER.** If your CSS says `line-height: 1.5` on a 14px font, pass `21` (= 14 × 1.5)
 
-**Returns:**
-```typescript
-{ lineCount: number, height: number }
+- `prepared`: a handle from `prepare()` or `prepareWithSegments()`.
+- `maxWidth`: the content width of the element, in CSS px. Pass the width you set, not one read back from the page (see [accuracy.md](accuracy.md#widths)).
+- `lineHeight`: **CSS px, not a multiplier.** For `font-size: 14px; line-height: 1.5`, pass `21` (see SKILL.md gotcha #1).
+
+**Returns** `{ lineCount, height }`, where `height` is `lineCount * lineHeight`.
+
+```ts
+const prepared = prepare('Some text content here', '14px Georgia')
+const lineHeight = 14 * 1.5 // CSS line-height: 1.5 on a 14px font
+
+const wide = layout(prepared, 500, lineHeight)   // → { lineCount: number, height: number }
+const narrow = layout(prepared, 100, lineHeight) // more lines at a narrower width; prepare() is not called again
 ```
 
-**Performance:** ~0.0002ms per call. Safe to call every animation frame.
+**Empty text gives 0 lines and a height of 0.** That matches the browser: an empty block is 0 tall. Don't clamp it to one line.
 
-**Empty-string behavior:** `layout(prepared, w, lh)` for empty text returns `{ lineCount: 0, height: 0 }`. Browsers still size an empty block to one `line-height` worth of space, so clamp if you need browser parity (see SKILL.md gotcha #8):
-
-```js
-const { lineCount, height } = layout(prepared, width, lineHeightPx);
-const browserHeight = Math.max(1, lineCount) * lineHeightPx;
+```ts claim=empty-block
+layout(prepare('', '16px Inter'), 200, 20) // → { lineCount: 0, height: 0 }
 ```
 
-```js
-import { prepare, layout } from '@chenglou/pretext';
+**A newline at the very end of `pre-wrap` text adds no line.** A `<textarea>` shows one more line than `layout()` counts when its value is empty or ends with `\n`, because it keeps a line for the caret. Add it yourself when you size a textarea:
 
-const prepared = prepare('Some text content here', '14px Georgia');
-const fontSize = 14;
-const lineHeightMultiplier = 1.5;
-const lineHeightPx = fontSize * lineHeightMultiplier; // = 21
-
-const result = layout(prepared, 500, lineHeightPx);
-// → { lineCount: 1, height: 21 }
-
-// Instant re-layout at different widths
-const narrow = layout(prepared, 100, lineHeightPx);
-// → { lineCount: 3, height: 63 }
+```ts claim=textarea-extra-line
+function textareaLines(value: string, font: string, width: number, lineHeight: number) {
+  const { lineCount } = layout(prepare(value, font, { whiteSpace: 'pre-wrap' }), width, lineHeight)
+  return value === '' || value.endsWith('\n') ? lineCount + 1 : lineCount
+}
+textareaLines('a\n', '16px Inter', 200, 20) // → 2, as the textarea shows
+textareaLines('', '16px Inter', 200, 20)    // → 1
 ```
 
 ---
@@ -120,72 +123,79 @@ const narrow = layout(prepared, 100, lineHeightPx);
 ## prepareWithSegments
 
 ```typescript
-prepareWithSegments(
-  text: string,
-  font: string,
-  options?: PrepareOptions
-): PreparedTextWithSegments
+function prepareWithSegments(text: string, font: string, options?: PrepareOptions): PreparedTextWithSegments
 ```
 
-Like `prepare()`, but returns a richer structure that includes segment information. Accepts the same `PrepareOptions` (`whiteSpace`, `wordBreak`, `letterSpacing`). Required for `layoutWithLines()`, `layoutNextLine()`, `layoutNextLineRange()`, `materializeLineRange()`, `walkLineRanges()`, `measureLineStats()`, and `measureNaturalWidth()`.
+Same as `prepare()`, with the same arguments and errors, but the handle also exposes the segments. Use it only for the three functions that return a line's text: `layoutWithLines()`, `layoutNextLine()` and `materializeLineRange()`. Everything else takes a plain `prepare()` handle, which doesn't keep every segment's string.
 
-```js
-import { prepareWithSegments, layoutWithLines } from '@chenglou/pretext';
-
-const prepared = prepareWithSegments('Hello world, this is a test.', '16px Inter');
-// Use with any of the manual-layout functions
+```ts
+const prepared = prepareWithSegments('Hello world, this is a test.', '16px Inter')
+const { lines } = layoutWithLines(prepared, 200, 24)
 ```
 
-The richer handle also internally carries `segLevels` (an `Int8Array | null`) for bidi-aware rendering. It's typed away by the public brand, so consumers can't read it through the supported API — it's there for custom RTL renderers that reach into the handle's internal shape. **The line-breaking APIs do not read it.**
+## Prepared handle fields
+
+The type of a `prepareWithSegments()` handle shows three fields, all read-only:
+
+| Field | Typed as | Holds |
+|---|---|---|
+| `segments` | `readonly string[]` | The text split into segments, such as `['hello', ' ', 'world']` |
+| `kinds` | `readonly SegmentBreakKind[]` (the 9 values below) | How each segment breaks |
+| `widths` | `ArrayLike<number>` | Each segment's width in px |
+
+The values of `kinds`, with upstream README's meanings:
+
+| Kind | Segment |
+|---|---|
+| `'text'` | Text, including a run of no-break spaces or a word joiner |
+| `'space'` | A collapsible space |
+| `'preserved-space'` | A space kept by `pre-wrap` |
+| `'tab'` | A tab kept by `pre-wrap` |
+| `'hard-break'` | A newline kept by `pre-wrap` |
+| `'zero-width-break'` | A zero-width space the line can break after |
+| `'soft-hyphen'` | A soft hyphen (U+00AD) |
+| `'zero-width-glue'` | A zero-width space or soft hyphen the browser doesn't break after, such as before a combining mark |
+| `'control'` | In Safari, a next-line character (U+0085) |
+
+**Copy before using array methods.** `widths` is typed `ArrayLike<number>`: it has an index and a `length`, and no `map`, `reduce`, spread or `for...of` is promised. Copy first: `Array.from(prepared.widths)`, `prepared.segments.slice()`. Never write to a field.
+
+**Segment widths don't add up to a line's width.** A tab's width is 0, the letter spacing after a segment's last letter isn't in its width, and a line broken at a soft hyphen adds the hyphen. Segment widths are for line breaking, not for placing characters in Arabic or mixed-direction text. For a line's width, read the line's `width`. For the whole text, call `measureNaturalWidth()`.
+
+```ts
+const prepared = prepareWithSegments('Hello world', '16px Inter')
+const widths = Array.from(prepared.widths) // a number[] you may sort, map or pass on
+const longest = prepared.segments.slice().sort((a, b) => b.length - a.length)[0]
+```
 
 ---
 
 ## layoutWithLines
 
 ```typescript
-layoutWithLines(
-  prepared: PreparedTextWithSegments,
-  maxWidth: number,
-  lineHeight: number
-): LayoutLinesResult
+function layoutWithLines(prepared: PreparedTextWithSegments, maxWidth: number, lineHeight: number): LayoutLinesResult
 ```
 
-Returns per-line text content and widths — useful for character-level animation, syntax highlighting per line, or custom rendering.
+All lines at one width, with their text. Use it to draw lines yourself, such as with Canvas `fillText()` or SVG `<text>`. Needs a `prepareWithSegments()` handle.
 
-**Returns:**
-```typescript
-{
-  height: number,
-  lineCount: number,
-  lines: LayoutLine[]
-}
+**Returns** `{ lineCount, height, lines }`. Each line is an object, `{ text, width, start, end }`, not a string (see [Types](#types)).
+
+- `line.text` can keep a trailing space where the line wrapped after it. Trim it if you paint something after the line's end.
+- `line.width` leaves out spaces and tabs that hang past the line's end, as browsers do.
+
+```ts
+const prepared = prepareWithSegments('The quick brown fox jumps over the lazy dog.', '16px Georgia')
+const { lines } = layoutWithLines(prepared, 200, 24)
+lines.forEach((line, i) => ctx.fillText(line.text, 0, i * 24))
 ```
 
-Each `LayoutLine`:
-```typescript
-{
-  text: string,    // full text content of the line
-  width: number,   // measured pixel width
-  start: LayoutCursor,  // inclusive start position
-  end: LayoutCursor     // exclusive end position
-}
-```
+What `lines` looks like (the break points and widths depend on the font):
 
-```js
-import { prepareWithSegments, layoutWithLines } from '@chenglou/pretext';
-
-const prepared = prepareWithSegments(
-  'The quick brown fox jumps over the lazy dog.',
-  '16px Georgia'
-);
-const result = layoutWithLines(prepared, 200, 24);
-
-result.lines.forEach((line, i) => {
-  console.log(`Line ${i}: "${line.text}" (${line.width}px)`);
-});
-// Line 0: "The quick brown fox " (162px)
-// Line 1: "jumps over the lazy " (158px)
-// Line 2: "dog." (38px)
+```js illustrative
+[
+  { text: 'The quick brown fox ', width: 151.2, start: { segmentIndex: 0, graphemeIndex: 0 }, end: { segmentIndex: 8, graphemeIndex: 0 } },
+  { text: 'jumps over the lazy ', width: 149.8, start: { segmentIndex: 8, graphemeIndex: 0 }, end: { segmentIndex: 16, graphemeIndex: 0 } },
+  { text: 'dog.', width: 34.6, start: { segmentIndex: 16, graphemeIndex: 0 }, end: { segmentIndex: 17, graphemeIndex: 0 } },
+]
 ```
 
 ---
@@ -193,42 +203,25 @@ result.lines.forEach((line, i) => {
 ## layoutNextLine
 
 ```typescript
-layoutNextLine(
-  prepared: PreparedTextWithSegments,
-  start: LayoutCursor,
-  maxWidth: number
-): LayoutLine | null
+function layoutNextLine(prepared: PreparedTextWithSegments, maxWidth: number, start?: LayoutCursor): LayoutLine | null
 ```
 
-Routes text one line at a time with a potentially different `maxWidth` each call. **This is the key API for obstacle-aware text flow** — text wrapping around shapes, images, or interactive elements.
+Lays out one line at a time, each at its own width: text around an image, inside a shape, or across columns. Returns `null` when the text is used up. Needs a `prepareWithSegments()` handle. When you don't need every line's text, use `layoutNextLineRange()`.
 
-Returns `null` when all text has been laid out.
+- **Width second, cursor third.** Omit `start`, or pass `undefined`, for the first line. Then pass the previous line's `end`. A `null` cursor throws a `TypeError`.
+- **Before 1.0.0 the cursor came second.** A call left in that order still runs in JavaScript but never returns `null`, so the loop never ends. See SKILL.md gotcha #10, and search old code as [migration.md](migration.md#find-old-usage) shows.
 
-**Arguments:**
-- `prepared` — from `prepareWithSegments()`
-- `start` — cursor position to start from. First call: `{ segmentIndex: 0, graphemeIndex: 0 }`
-- `maxWidth` — available width for THIS specific line (can vary per line)
-
-```js
-import { prepareWithSegments, layoutNextLine } from '@chenglou/pretext';
-
-const prepared = prepareWithSegments(longText, '14px Georgia');
-
-// Text flowing around a circular obstacle
-let cursor = { segmentIndex: 0, graphemeIndex: 0 };
-let y = 0;
-const lineHeight = 21;
-
+```ts
+const prepared = prepareWithSegments(longText, '14px Georgia')
+const lineHeight = 21
+let cursor: LayoutCursor | undefined // undefined: start at the beginning
+let y = 0
 while (true) {
-  // Calculate available width based on obstacle position
-  const availableWidth = getWidthAroundObstacle(y, circleX, circleY, circleRadius);
-
-  const line = layoutNextLine(prepared, cursor, availableWidth);
-  if (!line) break;
-
-  renderLine(line.text, y);
-  cursor = line.end;       // advance cursor to start of next line
-  y += lineHeight;
+  const line = layoutNextLine(prepared, getWidthAroundObstacle(y), cursor)
+  if (line === null) break
+  renderLine(line.text, y)
+  cursor = line.end
+  y += lineHeight
 }
 ```
 
@@ -237,40 +230,24 @@ while (true) {
 ## layoutNextLineRange
 
 ```typescript
-layoutNextLineRange(
-  prepared: PreparedTextWithSegments,
-  start: LayoutCursor,
-  maxWidth: number
-): LayoutLineRange | null
+function layoutNextLineRange(prepared: PreparedText, maxWidth: number, start?: LayoutCursor): LayoutLineRange | null
 ```
 
-Same as `layoutNextLine`, but returns a `LayoutLineRange` (no `.text` field) instead of a `LayoutLine`. Use this when you want variable-width routing AND you don't need every line's string up front — e.g., virtualization, hit-testing, occlusion culling, paint-on-demand renderers.
+Same as `layoutNextLine()`, with the same argument order, but returns a range, `{ width, start, end }`, without the text. It takes a `prepare()` handle. Use it to measure variable-width layouts, for virtualization or hit-testing, and turn only the lines you paint into text with `materializeLineRange()`, which needs a `prepareWithSegments()` handle.
 
-Pair with `materializeLineRange` to inflate a range into a full line on demand.
-
-```js
-import { prepareWithSegments, layoutNextLineRange, materializeLineRange } from '@chenglou/pretext';
-
-const prepared = prepareWithSegments(article, BODY_FONT);
-let cursor = { segmentIndex: 0, graphemeIndex: 0 };
-let y = 0;
-const visibleRanges = [];
-
+```ts
+const prepared = prepareWithSegments(article, BODY_FONT) // for materializeLineRange() below
+const visible: Array<{ range: LayoutLineRange; y: number }> = []
+let cursor: LayoutCursor | undefined
+let y = 0
 while (true) {
-  const width = y < image.bottom ? columnWidth - image.width : columnWidth;
-  const range = layoutNextLineRange(prepared, cursor, width);
-  if (!range) break;
-
-  if (isVisible(y)) visibleRanges.push({ range, y }); // only keep ranges that need rendering
-  cursor = range.end;
-  y += lineHeight;
+  const range = layoutNextLineRange(prepared, getColumnWidth(y), cursor)
+  if (range === null) break
+  if (isVisible(y)) visible.push({ range, y })
+  cursor = range.end
+  y += lineHeight
 }
-
-// Later, only materialize the lines we actually paint
-for (const { range, y } of visibleRanges) {
-  const line = materializeLineRange(prepared, range);
-  ctx.fillText(line.text, 0, y);
-}
+for (const { range, y } of visible) ctx.fillText(materializeLineRange(prepared, range).text, 0, y)
 ```
 
 ---
@@ -278,59 +255,37 @@ for (const { range, y } of visibleRanges) {
 ## materializeLineRange
 
 ```typescript
-materializeLineRange(
-  prepared: PreparedTextWithSegments,
-  line: LayoutLineRange
-): LayoutLine
+function materializeLineRange(prepared: PreparedTextWithSegments, line: LayoutLineRange): LayoutLine
 ```
 
-Turns a `LayoutLineRange` from `layoutNextLineRange()` or `walkLineRanges()` into a `LayoutLine` with the resolved `.text` string.
+Turns a range from `layoutNextLineRange()` or `walkLineRanges()` into a line with its `text`. Needs a `prepareWithSegments()` handle of the same text.
 
-```js
-import { materializeLineRange } from '@chenglou/pretext';
+**A line broken at a soft hyphen** has `text` ending in `-`, and its `width` counts the hyphen the browser draws there. To tell such a line from one that ends in a real hyphen, check the segment before its end:
 
-const line = materializeLineRange(prepared, range);
-// → { text: "hello world", width: 87.5, start: {...}, end: {...} }
+```ts claim=soft-hyphen-break
+function endsAtSoftHyphen(prepared: PreparedTextWithSegments, line: LayoutLine) {
+  return line.text.endsWith('-') && line.end.graphemeIndex === 0 && prepared.kinds[line.end.segmentIndex - 1] === 'soft-hyphen'
+}
+const hyphenated = prepareWithSegments('in\u00ADcom\u00ADpre\u00ADhen\u00ADsi\u00ADble', '16px Inter')
+const first = materializeLineRange(hyphenated, layoutNextLineRange(hyphenated, 60))
+endsAtSoftHyphen(hyphenated, first) // true where the line broke at a soft hyphen
 ```
-
-If a soft hyphen won the break, the materialized text includes a trailing `-`.
 
 ---
 
 ## walkLineRanges
 
 ```typescript
-walkLineRanges(
-  prepared: PreparedTextWithSegments,
-  maxWidth: number,
-  onLine: (line: LayoutLineRange) => void
-): number
+function walkLineRanges(prepared: PreparedText, maxWidth: number, onLine: (line: LayoutLineRange) => void): number
 ```
 
-Low-level line iteration — calls a callback for each line without building text strings. More efficient than `layoutWithLines` when you only need widths and positions, not the actual text. For "give me line count + widest in one call," prefer [`measureLineStats`](#measurelinestats) — it's a single call with no callback.
+Calls `onLine` once per line at a fixed width, with the line's `width`, `start` and `end`, without building text. Returns the line count. Takes a `prepare()` handle. Use it when you need each line's width, such as to search for a width that gives balanced lines. For only the count and the widest line, `measureLineStats()` is one call with no callback.
 
-**Returns:** total line count.
-
-Each `LayoutLineRange`:
-```typescript
-{
-  width: number,
-  start: LayoutCursor,  // inclusive
-  end: LayoutCursor     // exclusive
-}
-```
-
-```js
-import { prepareWithSegments, walkLineRanges } from '@chenglou/pretext';
-
-const prepared = prepareWithSegments(text, font);
-
-// Find the widest line (for shrink-wrap containers)
-let maxLineWidth = 0;
-const lineCount = walkLineRanges(prepared, containerWidth, (line) => {
-  maxLineWidth = Math.max(maxLineWidth, line.width);
-});
-// maxLineWidth is now the pixel width of the widest line
+```ts
+const prepared = prepare(text, '16px Inter')
+const lineWidths: number[] = []
+const lineCount = walkLineRanges(prepared, 320, (line) => lineWidths.push(line.width))
+const shortestLast = lineWidths[lineWidths.length - 1] < 0.3 * 320 // a short last line: try a narrower width
 ```
 
 ---
@@ -338,317 +293,189 @@ const lineCount = walkLineRanges(prepared, containerWidth, (line) => {
 ## measureLineStats
 
 ```typescript
-measureLineStats(
-  prepared: PreparedTextWithSegments,
-  maxWidth: number
-): LineStats
+function measureLineStats(prepared: PreparedText, maxWidth: number): LineStats
 ```
 
-Returns `{ lineCount, maxLineWidth }` in a single call, without allocating any line objects or strings. This is the cheapest way to ask "how does this text wrap?" — use it for shrink-wrap balloons, balanced-text width searches, and any UI that resizes containers to fit content.
+Returns `{ lineCount, maxLineWidth }` at a width: a single call, no callback. Takes a `prepare()` handle. Use it to shrink-wrap a chat bubble or a tooltip to its widest line.
 
-```js
-import { prepareWithSegments, measureLineStats } from '@chenglou/pretext';
+**Cap the width you set.** Size the element to `Math.ceil(maxLineWidth)`, capped at the `maxWidth` you measured with. At the exact fractional width the browser can wrap the widest line, and without the cap the element can come out wider than `maxWidth`.
 
-const prepared = prepareWithSegments('Hello world, this is a chat message.', '14px Inter');
-const { lineCount, maxLineWidth } = measureLineStats(prepared, 280);
-// Set bubble width to the longest line, not the container — feels tighter
-bubble.style.width = Math.ceil(maxLineWidth) + paddingX * 2 + 'px';
+```ts
+const maxWidth = 280
+const prepared = prepare('Hello world, this is a chat message.', '14px Inter')
+const { lineCount, maxLineWidth } = measureLineStats(prepared, maxWidth)
+const contentWidth = Math.min(maxWidth, Math.ceil(maxLineWidth))
+bubble.style.width = `${contentWidth}px` // content box: padding and border go outside it
+bubble.style.height = `${lineCount * 20}px`
 ```
-
-Cheaper than `walkLineRanges` when you only need the aggregates, because the callback-free path avoids per-line object allocation.
 
 ---
 
 ## measureNaturalWidth
 
 ```typescript
-measureNaturalWidth(
-  prepared: PreparedTextWithSegments
-): number
+function measureNaturalWidth(prepared: PreparedText): number
 ```
 
-Returns the widest **forced** line in the text — i.e., the widest line you get when the only line breaks are hard breaks (`\n` in `pre-wrap` mode) and there's no soft wrap. Useful for intrinsic sizing: "how wide would this paragraph want to be if you gave it infinite horizontal space?"
+The width of the widest line when only explicit line breaks apply, like CSS `max-content`. Takes a `prepare()` handle.
 
-```js
-import { prepareWithSegments, measureNaturalWidth } from '@chenglou/pretext';
+- Text without `\n` (or in `normal` white space) measures as one line. For the width of soft-wrapped text, such as a bubble, use `measureLineStats()` at a `maxWidth`.
+- In `pre-wrap`, it counts the spaces before a newline, as `max-content` does, though a line's `width` leaves them out.
+- A lone collapsible space measures 0. To measure a space, use `pre-wrap` or a no-break space, `'\u00A0'`.
 
-const prepared = prepareWithSegments('First line\nSecond, longer line', '16px Inter', { whiteSpace: 'pre-wrap' });
-const intrinsic = measureNaturalWidth(prepared);
-// intrinsic ≈ width of "Second, longer line"
+```ts
+const prepared = prepare('First line\nSecond, longer line', '16px Inter', { whiteSpace: 'pre-wrap' })
+const natural = measureNaturalWidth(prepared) // the width of "Second, longer line"
 ```
 
-**Important: this is NOT the right tool for shrink-wrap of soft-wrapping text.** If your text has no hard breaks, `measureNaturalWidth` will return the width of the entire string as a single line. For soft-wrap shrink-wrap (chat bubbles, balanced text within a max width), use [`measureLineStats`](#measurelinestats) or [`walkLineRanges`](#walklineranges).
+```ts claim=space-natural-width
+measureNaturalWidth(prepare(' ', '16px Inter'))                           // → 0
+measureNaturalWidth(prepare(' ', '16px Inter', { whiteSpace: 'pre-wrap' })) // → more than 0
+measureNaturalWidth(prepare('\u00A0', '16px Inter'))                      // → more than 0
+```
 
 ---
 
 ## clearCache
 
 ```typescript
-clearCache(): void
+function clearCache(): void
 ```
 
-Clears internal measurement caches. Rarely needed — the cache is small and improves performance for repeated measurements with the same font.
+Empties the measurement caches that `prepare()`, `prepareWithSegments()` and `prepareRichInline()` share. Handles you already have keep their widths. Text prepared afterwards is measured again. Call it:
 
-Use if you're dynamically loading many different fonts and want to free memory.
+- **After a web font loads late**, if text in that font was prepared before: those widths are the fallback font's. Clear, then prepare that text again (see SKILL.md gotcha #4 and [accuracy.md](accuracy.md#fonts)).
+- **After `devicePixelRatio` changes**, as when the page is zoomed, if text has emoji: on macOS a small emoji's painted width depends on the ratio, per upstream. Clear, then prepare that text again.
+- **When your app cycles through many fonts** and you want to release what has built up.
+
+The caches also empty themselves: once they hold more than 262,144 segments between all fonts, the next preparation clears them first.
+
+```ts
+async function useFontLate(text: string) {
+  await document.fonts.load('16px Inter', text)
+  clearCache()
+  return prepare(text, '16px Inter')
+}
+```
 
 ---
 
 ## setLocale
 
 ```typescript
-setLocale(locale?: string): void
+function setLocale(locale?: string): void
 ```
 
-Sets the locale for `Intl.Segmenter`, which affects how text is segmented for line breaking. Default behavior uses the runtime's locale.
+Sets the language that later `prepare()`, `prepareWithSegments()` and `prepareRichInline()` calls break lines and measure under, in place of the page's `<html lang>`.
 
-- Call with a locale string (`'ja'`, `'ko'`, `'th'`, etc.) to override.
-- Call with no argument (`setLocale()`) or `setLocale(undefined)` to reset to the runtime locale.
-- **Internally calls `clearCache()`** — any previously prepared handles still work (no mutation), but new `prepare()` calls re-measure from scratch under the new locale.
+- **Pass the page's language, not the user's.** The language changes line breaks and fonts, so it has to be the language the page's text is painted under. On a page with `<html lang>`, you don't need to call it.
+- `setLocale()` with no argument goes back to `<html lang>`. `setLocale('')` means a page with no language.
+- **Workers need it.** A worker has no `<html lang>`: send it the page's `document.documentElement.lang` and call `setLocale()` with it once, before the first `prepare()` (see [accuracy.md](accuracy.md#outside-the-browser)).
+- Internally calls `clearCache()`. Existing handles are not changed. If the page's `lang` changes, prepare your text again.
 
-```js
-import { setLocale } from '@chenglou/pretext';
-setLocale('ja');      // Japanese segmentation rules; clears caches
-setLocale();          // Reset to runtime default; clears caches again
+```ts
+// In a worker, with the language the page sent: '' for a page without one
+self.onmessage = (event: MessageEvent<{ lang: string }>) => setLocale(event.data.lang)
 ```
 
 ---
 
 ## Types
 
-### LayoutCursor
+All exported types of the main entry, as `dist/layout.d.ts` declares them, with the type aliases written out.
+
+`PreparedText` is a brand: a type with no readable fields, made only by `prepare()` or `prepareWithSegments()`. `WordBreakMode` is `'normal' | 'keep-all'`.
+
 ```typescript
-{
-  segmentIndex: number,    // position in the segment stream
-  graphemeIndex: number     // grapheme position within segment (0 at boundaries)
+type PreparedTextWithSegments = PreparedText & {
+  readonly segments: readonly string[]
+  readonly kinds: readonly ('text' | 'space' | 'preserved-space' | 'tab' | 'zero-width-break' | 'soft-hyphen' | 'zero-width-glue' | 'hard-break' | 'control')[]
+  readonly widths: ArrayLike<number>
 }
 ```
 
-Initial cursor for `layoutNextLine` / `layoutNextLineRange`: `{ segmentIndex: 0, graphemeIndex: 0 }`.
+See [Prepared handle fields](#prepared-handle-fields). All three are read-only: copy one before you pass it on as an array or call array methods on it.
 
-### LayoutLine
 ```typescript
-{
-  text: string,
-  width: number,
-  start: LayoutCursor,  // inclusive
-  end: LayoutCursor     // exclusive
+type PrepareOptions = {
+  whiteSpace?: 'normal' | 'pre-wrap'
+  wordBreak?: 'normal' | 'keep-all'
+  letterSpacing?: number
 }
 ```
 
-### LayoutLineRange
+`letterSpacing` is in CSS px and must be finite. Leaving a field out, or passing `undefined`, gives the default.
+
 ```typescript
-{
-  width: number,
-  start: LayoutCursor,  // inclusive
-  end: LayoutCursor     // exclusive
+type LayoutResult = {
+  lineCount: number
+  height: number
 }
 ```
 
-### LineStats
+`height` is `lineCount * lineHeight`. Both are 0 for empty text.
+
 ```typescript
-{
-  lineCount: number,        // total wrapped lines
-  maxLineWidth: number       // widest wrapped line in CSS px
+type LineStats = {
+  lineCount: number
+  maxLineWidth: number
 }
 ```
 
-### LayoutLinesResult
+`maxLineWidth` is the widest line's `width`, so it leaves out hanging spaces.
+
 ```typescript
-{
-  height: number,
-  lineCount: number,
+type LayoutCursor = {
+  segmentIndex: number
+  graphemeIndex: number
+}
+```
+
+A position in the prepared segments, not a string offset. `graphemeIndex` is 0 at a segment boundary. Pass a line's `end` back as the next `start`.
+
+```typescript
+type LayoutLine = {
+  text: string
+  width: number
+  start: LayoutCursor
+  end: LayoutCursor
+}
+```
+
+`start` is inclusive and `end` exclusive. `width` leaves out spaces and tabs that hang past the line's end: all of them where the line wraps, and in `pre-wrap`, before a newline or at the end of the text, only the part that doesn't fit in `maxWidth`.
+
+```typescript
+type LayoutLineRange = {
+  width: number
+  start: LayoutCursor
+  end: LayoutCursor
+}
+```
+
+A `LayoutLine` without its `text`. Turn it into one with `materializeLineRange()`.
+
+```typescript
+type LayoutLinesResult = LayoutResult & {
   lines: LayoutLine[]
 }
-```
-
-### PrepareOptions
-```typescript
-{
-  whiteSpace?: 'normal' | 'pre-wrap',
-  wordBreak?: 'normal' | 'keep-all',
-  letterSpacing?: number    // CSS pixel value; not em/percent
-}
-```
-
----
-
-## Rich Inline
-
-The `@chenglou/pretext/rich-inline` subpath is a narrow helper for inline-only rich text — mentions, chips, code spans, links — with browser-like boundary whitespace collapse. **Intentionally scoped:** raw inline text only, `white-space: normal` only, no nested markup trees, no general CSS inline formatting engine. For block-level layout, stay with the core module.
-
-Items are an array of `{ text, font, letterSpacing?, break?, extraWidth? }`. Each item carries its own font; `break: 'never'` keeps an item atomic (the chip won't split across lines); `extraWidth` is caller-owned chrome (chip padding/border) that the layout reserves for you.
-
-### Side-by-side parameter order vs core
-
-This is a real footgun (see SKILL.md gotcha #10):
-
-```ts
-// Core path:
-layoutNextLine(prepared, start, maxWidth)
-// signature:  (prepared, start: LayoutCursor, maxWidth: number) → LayoutLine | null
-
-// Rich-inline path:
-layoutNextRichInlineLineRange(prepared, maxWidth, start?)
-// signature:  (prepared, maxWidth: number, start?: RichInlineCursor) → RichInlineLineRange | null
-```
-
-`start` and `maxWidth` are **in different positions**. `start` is also **optional** in the rich-inline path (first call can omit it; subsequent calls pass the previous line's `end`).
-
-### Functions
-
-```typescript
-prepareRichInline(items: RichInlineItem[]): PreparedRichInline
-```
-
-One-time compile: normalizes cross-item collapsed whitespace, measures each item's natural width, returns an opaque handle. Like `prepare()`, this re-runs segment work over the full input on every call — don't re-call it per token in streaming.
-
-```typescript
-layoutNextRichInlineLineRange(
-  prepared: PreparedRichInline,
-  maxWidth: number,
-  start?: RichInlineCursor
-): RichInlineLineRange | null
-```
-
-Stream one line at a time at variable widths without building fragment text strings. Returns `null` when exhausted. First call: omit `start`; subsequent calls: pass the previous range's `end`.
-
-```typescript
-materializeRichInlineLineRange(
-  prepared: PreparedRichInline,
-  line: RichInlineLineRange
-): RichInlineLine
-```
-
-Turns a non-materialized range into a full line with fragment text. Pair with `layoutNextRichInlineLineRange` for paint-on-demand renderers.
-
-```typescript
-walkRichInlineLineRanges(
-  prepared: PreparedRichInline,
-  maxWidth: number,
-  onLine: (line: RichInlineLineRange) => void
-): number
-```
-
-Non-materializing line walker — calls the callback once per line with width + cursors, no fragment text. Use for shrink-wrap, stats, or visibility tests.
-
-```typescript
-measureRichInlineStats(
-  prepared: PreparedRichInline,
-  maxWidth: number
-): RichInlineStats
-```
-
-Single-call `{ lineCount, maxLineWidth }` — same shape as `measureLineStats`, no allocations.
-
-### Worked example: chat bubble with @mention chip and code span
-
-```ts
-import {
-  prepareRichInline,
-  walkRichInlineLineRanges,
-  materializeRichInlineLineRange,
-} from '@chenglou/pretext/rich-inline';
-
-const items = [
-  { text: 'Ship ',                font: '500 17px Inter' },
-  { text: '@maya',                font: '700 12px Inter', break: 'never', extraWidth: 22 }, // pill chrome
-  { text: "'s rich-note via ",    font: '500 17px Inter' },
-  { text: 'git push',             font: '500 15px "JetBrains Mono"', break: 'never' },      // code span
-  { text: ' before standup.',     font: '500 17px Inter' },
-];
-
-const prepared = prepareRichInline(items);
-
-walkRichInlineLineRanges(prepared, 320, (range) => {
-  const line = materializeRichInlineLineRange(prepared, range);
-  for (const fragment of line.fragments) {
-    const item = items[fragment.itemIndex];
-    // render fragment.text at x = (running x + fragment.gapBefore), using item.font + item chrome
-  }
-});
-```
-
-### Rich-inline types
-
-```typescript
-type RichInlineItem = {
-  text: string,                       // raw author text, including leading/trailing collapsible spaces
-  font: string,                       // canvas font shorthand
-  letterSpacing?: number,             // CSS pixel value; not em/percent
-  break?: 'normal' | 'never',         // 'never' = atomic item (chip, code span)
-  extraWidth?: number                 // caller-owned chrome (padding + border) in px
-};
-
-type RichInlineCursor = {
-  itemIndex: number,                  // which RichInlineItem we're in
-  segmentIndex: number,               // segment within that item
-  graphemeIndex: number                // grapheme within that segment
-};
-
-type RichInlineFragment = {
-  itemIndex: number,
-  text: string,
-  gapBefore: number,                  // collapsed boundary gap paid before this fragment
-  occupiedWidth: number,              // text width + extraWidth
-  start: LayoutCursor,                // within the item's prepared text
-  end: LayoutCursor
-};
-
-type RichInlineFragmentRange = {       // same as RichInlineFragment without .text
-  itemIndex: number,
-  gapBefore: number,
-  occupiedWidth: number,
-  start: LayoutCursor,
-  end: LayoutCursor
-};
-
-type RichInlineLine = {
-  fragments: RichInlineFragment[],
-  width: number,                      // line width incl. gapBefore + extraWidth
-  end: RichInlineCursor
-};
-
-type RichInlineLineRange = {
-  fragments: RichInlineFragmentRange[],
-  width: number,
-  end: RichInlineCursor
-};
-
-type RichInlineStats = {
-  lineCount: number,
-  maxLineWidth: number
-};
 ```
 
 ---
 
 ## Language Support
 
-Pretext handles these script families correctly via `Intl.Segmenter`:
+In Chrome, Safari and Firefox, Pretext finds where lines can break with ports of that browser's own line breaker and its data, and finds grapheme clusters with the character rules that browser ships. Lines break where that browser breaks them, including around CJK punctuation and quotes, dashes and URLs. Engines it doesn't recognize, and runtimes outside the browser, get Chrome's rules (see [accuracy.md](accuracy.md#engine-versions)).
 
-- **Latin, Greek, Cyrillic** — word-level breaking at spaces
-- **CJK (Chinese, Japanese, Korean)** — character-level breaking; `wordBreak: 'keep-all'` matches CSS `word-break: keep-all`
-- **Thai** — segmented at word boundaries despite no spaces
-- **Arabic, Hebrew** — RTL line breaking. Pretext ships its own bidi module (`dist/bidi.js`) with generated Unicode bidi data. Segment widths are browser-canvas widths used for line breaking — **not exact glyph x-coordinates for custom Arabic or mixed-direction reconstruction.** The richer handle exposes `segLevels` internally for custom RTL renderers, but no supported public API reads it
-- **Hindi, other Indic scripts** — proper grapheme clustering
-- **Emoji** — width correction for cross-platform consistency (though some platform-specific quirks remain)
-- **Soft hyphens** — respected as break opportunities; chosen breaks render a trailing `-` in materialized line text
-- **Punctuation merging** — `word.`, `$100`, `5%`, `°C`, opening punctuation like `¡` `¿` German low quotes — all stay attached to their adjacent word the way browsers do
+- **Latin, Greek, Cyrillic and similar:** breaks at spaces and at the browser's other break opportunities, such as after hyphens.
+- **Chinese, Japanese, Korean:** breaks between characters, with closing punctuation such as `。` kept on the line before. `wordBreak: 'keep-all'` matches CSS `word-break: keep-all`.
+- **Thai, Lao, Khmer, Myanmar** and other scripts written without spaces: word boundaries come from `Intl.Segmenter`, which Pretext needs only for these scripts. Without it, preparing such text throws.
+- **Arabic, Hebrew and mixed-direction text:** lines break correctly, but **Pretext gives no bidi levels and no visual order.** Paint each paragraph as one element with its direction set, and let the browser order each line. Lines drawn one at a time, such as with Canvas, are each ordered as their own paragraph (see [accuracy.md](accuracy.md#painting)).
+- **Soft hyphens:** insert U+00AD (`'\u00AD'`) yourself. Pretext doesn't hyphenate. A line broken at one ends with `-`, which its `width` counts.
+- **Emoji:** measured with the canvas. Small emoji widths on macOS depend on `devicePixelRatio` (see [clearCache](#clearcache)).
+- **Page language** changes line breaks and fonts. Pretext reads `<html lang>`, or what you pass to `setLocale()`, never an element's own `lang` (see [accuracy.md](accuracy.md#language)).
 
 ---
 
-## Caveats & Quirks
+## Rich inline text
 
-Things to know that aren't bugs but will surprise you. These are lifted verbatim from the upstream README and cross-referenced to SKILL.md gotchas where applicable.
-
-- **Empty string returns `{ lineCount: 0, height: 0 }`** — browsers size empty blocks to one `line-height` of space. Clamp with `Math.max(1, lineCount) * lineHeight` for parity. See SKILL.md gotcha #8.
-- **Tabs default to `tab-size: 8`** — Pretext doesn't read any other CSS tab-size value. If your CSS overrides this, measurements diverge.
-- **`overflow-wrap: break-word` is built in** — very narrow widths break inside words, but only at grapheme boundaries (no mid-grapheme breaks).
-- **Soft hyphens are manual** — Pretext does NOT auto-hyphenate. Insert U+00AD into your text before `prepare()`; Pretext treats them as optional break points. If a soft hyphen wins the break, materialized line text includes a visible trailing `-`. For mixed-language or user-generated text, prefer conservative locale-aware insertion over aggressive pattern hyphenation.
-- **`font-feature-settings`, `font-optical-sizing`, and standalone `font-variation-settings` are not modeled** — they don't appear in the canvas `font` shorthand, so Pretext can't see them. If your CSS uses ligatures or stylistic alternates, measurements may drift slightly.
-- **Variable-font axes only honored if reflected in the canvas `font` shorthand** — weight axis works (you put it in the shorthand: `'500 16px Inter'`). Custom axes like `wght` declared via `font-variation-settings` are invisible to Pretext.
-- **`system-ui` is unsafe on macOS** — Canvas resolves it to a different optical variant than DOM rendering. Use a named font for guaranteed accuracy. See SKILL.md gotcha #5.
-- **Hard-break paths (`measureNaturalWidth`)** — returns the widest forced line; for soft-wrap shrink-wrap of text without hard breaks, use `measureLineStats` or `walkLineRanges`. See SKILL.md "Common API selection mistakes."
-- **`prepare()` cost is O(input length)** — re-running `prepare()` on a growing token stream every frame is O(N²) across the stream. For streaming chat, debounce on sentence/punctuation boundaries or switch to DOM measurement above a length threshold. See patterns.md "Streaming AI Chat." For iterative width searches (auto-fit, shrink-wrap balanced, Knuth-Plass), hoist `prepare()` outside the loop — see patterns.md "Iterative Width Search."
-- **Post-measurement string ops invalidate measurements** — CSS `text-transform: uppercase` and JS `.toUpperCase()` / smart-quote / ligature substitutions all change rendered widths (uppercase letters can be 10–15% wider). Apply the transform BEFORE `prepare()`. See SKILL.md gotcha #11.
-- **CSS-driven wrap on a pretext-measured box silently drifts** — if pretext measures break points and CSS (`<foreignObject>`, `max-width` container) does the actual wrapping, the line counts can disagree at corners. Either render per pretext break points (per-line `<tspan>` / `<div>`) or use CSS for both measurement and rendering. See SKILL.md gotcha #12 and patterns.md "Rendering Per-Line in SVG."
+Text in several fonts, with chips, mentions, code spans or inline images, uses `@chenglou/pretext/rich-inline`: see [rich-inline.md](rich-inline.md).
