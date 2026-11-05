@@ -14,19 +14,25 @@ const RICH = '@chenglou/pretext/rich-inline'
 
 // ---------- fences ----------
 
-// Returns [{ file, lang, line, bodyLine, body, tags }] where line is the 1-based fence line.
-export function parseFences(text, file) {
+// A fence opens with 3 or more backticks or tildes; it closes with a line of only the same
+// character, at least as many (CommonMark).
+const FENCE_OPEN = /^(\s*)(`{3,}|~{3,})\s*([\w-]+)?(.*)$/
+const closesFence = (l, fence) => { const m = /^\s*(`{3,}|~{3,})\s*$/.exec(l); return !!m && m[1][0] === fence[0] && m[1].length >= fence.length }
+
+// Returns [{ file, lang, line, bodyLine, body, tags }] where line is the 1-based fence line. A fence
+// left open at the end of the file is pushed to `errors` as { file, line } and yields no block.
+export function parseFences(text, file, errors = []) {
   const lines = text.split('\n')
   const blocks = []
   let open = null
   lines.forEach((l, i) => {
     if (!open) {
-      const m = /^(\s*)```\s*([\w-]+)?(.*)$/.exec(l)
-      if (!m) return
-      open = { file, indent: m[1].length, lang: (m[2] || '').toLowerCase(), info: m[3].trim(), line: i + 1, buf: [] }
+      const m = FENCE_OPEN.exec(l)
+      if (!m || (m[2][0] === '`' && m[4].includes('`'))) return
+      open = { file, indent: m[1].length, fence: m[2], lang: (m[3] || '').toLowerCase(), info: m[4].trim(), line: i + 1, buf: [] }
       return
     }
-    if (/^\s*```\s*$/.test(l)) {
+    if (closesFence(l, open.fence)) {
       const tags = parseInfo(open.info)
       blocks.push({ file, lang: open.lang, line: open.line, bodyLine: open.line + 1, body: open.buf.join('\n'), tags })
       open = null
@@ -34,6 +40,7 @@ export function parseFences(text, file) {
     }
     open.buf.push(l.slice(Math.min(open.indent, l.length - l.trimStart().length)))
   })
+  if (open) errors.push({ file, line: open.line })
   return blocks
 }
 
@@ -57,8 +64,12 @@ export function skillFiles(skillDir) {
   return out
 }
 
+// The blocks of every skill file; `blocks.unclosed` lists fences left open ({ file, line }).
 export function loadBlocks(skillDir) {
-  return skillFiles(skillDir).flatMap((f) => parseFences(fs.readFileSync(path.join(skillDir, f), 'utf8'), f))
+  const unclosed = []
+  const blocks = skillFiles(skillDir).flatMap((f) => parseFences(fs.readFileSync(path.join(skillDir, f), 'utf8'), f, unclosed))
+  blocks.unclosed = unclosed
+  return blocks
 }
 
 export const CODE_LANGS = new Set(['js', 'ts', 'jsx'])
@@ -281,10 +292,12 @@ export function slug(heading) {
 // Lines outside fenced code, with 1-based numbers and inline code removed.
 export function outsideFences(text) {
   const out = []
-  let inFence = false
+  let fence = null
   text.split('\n').forEach((l, i) => {
-    if (/^\s*```/.test(l)) { inFence = !inFence; return }
-    if (!inFence) out.push({ line: l.replace(/`[^`]*`/g, (s) => (/^#/.test(l) ? s.slice(1, -1) : '')), n: i + 1 })
+    if (fence) { if (closesFence(l, fence)) fence = null; return }
+    const m = FENCE_OPEN.exec(l)
+    if (m && !(m[2][0] === '`' && m[4].includes('`'))) { fence = m[2]; return }
+    out.push({ line: l.replace(/`[^`]*`/g, (s) => (/^#/.test(l) ? s.slice(1, -1) : '')), n: i + 1 })
   })
   return out
 }

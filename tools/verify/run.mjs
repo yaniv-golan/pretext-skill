@@ -56,6 +56,7 @@ fs.mkdirSync(path.join(BUILD, 'g3'), { recursive: true })
 // ---------- gate 1 prep: one module per non-illustrative js/ts/jsx block ----------
 const g1Files = new Map() // abs path -> { block, map }
 await guard(1, () => {
+  for (const u of blocks.unclosed) fail(1, `${u.file}:${u.line}`, 'fence', 'code fence never closed')
   for (const b of blocks) {
     if (!CODE_LANGS.has(b.lang) || b.tags.illustrative) continue
     const mod = buildModule(b, blocks, names)
@@ -214,7 +215,13 @@ await guard(2, async () => {
     const mod = buildModule(b, blocks, names)
     for (const e of mod.errors) fail(2, loc, 'needs', e)
     const exposed = b.tags.id.filter((id) => fns.includes(id))
-    const code = mod.code + exposed.map((id) => `\nglobalThis.__recipes.${id} = ${id};`).join('')
+    // A jsx block also exposes its own copy of React and react-dom: a component only renders under
+    // the React it imports, and the harness bundle holds another copy.
+    const react = ext === 'jsx'
+      ? "\nimport * as __React from 'react'; import * as __ReactDOM from 'react-dom'; import * as __ReactDOMClient from 'react-dom/client';" +
+        '\nglobalThis.__react = { ...__React, ...__ReactDOM, ...__ReactDOMClient };'
+      : ''
+    const code = mod.code + react + exposed.map((id) => `\nglobalThis.__recipes.${id} = ${id};`).join('')
     try {
       bundles.set(`block${i}`, await bundle(code, ext, `${b.file.replace(/\//g, '_')}-L${b.line}.${ext}`))
       blockUnits.push({ block: b, bundle: `block${i}`, ids: exposed.filter((id) => CHECKS[id]), exposed })
@@ -228,7 +235,11 @@ await guard(2, async () => {
 // `run` block whose id= declares that function, which sets globalThis.__recipes.<id>.
 const recipeBundle = (c) => blockUnits.find((u) => u.exposed.includes(c.recipe))?.bundle
 await guard(4, () => {
-  for (const c of CLAIMS) if (c.recipe && !recipeBundle(c)) fail(4, '<none>:0', c.id, 'no block')
+  for (const c of CLAIMS) {
+    if (!c.recipe || recipeBundle(c)) continue
+    const b = runBlocks.find((rb) => rb.tags.id.includes(c.recipe))
+    fail(4, b ? `${b.file}:${b.line}` : '<none>:0', c.id, b ? `block declaring ${c.recipe} failed to bundle` : 'no block')
+  }
 })
 
 // Node claims, each in its own process
@@ -294,27 +305,34 @@ for (const engine of BROWSERS) {
     // gate 2: each run block loads (5 s watchdog). Then, on a fresh page each, its check runs on the
     // documented recipe (must pass within 60 s) and on every mutant (must fail; a mutant that hangs past
     // 10 s counts as rejected). A synchronous hang blocks the whole page, hence one page per function.
+    // A watchdog that fires sets timedOut, so its error (often "Target page ... has been closed",
+    // since the watchdog closes the page) is told apart from a page that crashed or closed by itself.
+    const TIMED_OUT = Symbol('timed out')
     const loadBlock = async (u) => {
       const page = await withTimeout(openPage(context), 30000)
+      let timedOut = false
       try {
-        await withTimeout(page.evaluate((n) => import(`/b/${n}.js`).then(() => {}), u.bundle), 5000, () => page.close().catch(() => {}))
-      } catch (e) { await page.close().catch(() => {}); throw e }
+        await withTimeout(page.evaluate((n) => import(`/b/${n}.js`).then(() => {}), u.bundle), 5000, () => { timedOut = true; page.close().catch(() => {}) })
+      } catch (e) { await page.close().catch(() => {}); if (timedOut) e[TIMED_OUT] = true; throw e }
       return page
     }
-    // target: 'recipe' or a mutant index. Resolves { ok } or { ok: false, msg, timeout }.
+    // target: 'recipe' or a mutant index. Resolves { ok: true }, { ok: false, kind: 'check', msg } when
+    // the check rejected it, { ok: false, kind: 'timeout' } or { ok: false, kind: 'error', msg } when
+    // the block failed to load or evaluate.
     const attempt = async (u, id, target, ms) => {
       let page
+      let timedOut = false
       try {
         page = await loadBlock(u)
         const msg = await withTimeout(page.evaluate(async ({ id, target, engine }) => {
           const entry = globalThis.__checks[id]
           const fn = target === 'recipe' ? globalThis.__recipes[id] : entry.mutants[target]
           try { return (await entry.check(fn, { engine })) === false ? 'check returned false' : null } catch (e) { return String(e?.message || e) }
-        }, { id, target, engine }), ms, () => page.close().catch(() => {}))
-        return msg ? { ok: false, msg } : { ok: true }
+        }, { id, target, engine }), ms, () => { timedOut = true; page.close().catch(() => {}) })
+        return msg ? { ok: false, kind: 'check', msg } : { ok: true }
       } catch (e) {
-        const timeout = /timed out|Target page, context or browser has been closed/.test(e.message)
-        return { ok: false, timeout, msg: timeout ? 'timed out' : e.message.split('\n')[0] }
+        if (timedOut || e[TIMED_OUT]) return { ok: false, kind: 'timeout', msg: 'timed out' }
+        return { ok: false, kind: 'error', msg: e.message.split('\n')[0] }
       } finally { await page?.close().catch(() => {}) }
     }
     await guard(2, async () => {
@@ -322,14 +340,18 @@ for (const engine of BROWSERS) {
         const loc = `${u.block.file}:${u.block.line}`
         try {
           try { await (await loadBlock(u)).close() } catch (e) {
-            fail(2, loc, u.block.tags.id[0] || 'load', `${engine}: ${/timed out/.test(e.message) ? 'timed out' : e.message.split('\n')[0]}`)
+            fail(2, loc, u.block.tags.id[0] || 'load', `${engine}: ${e[TIMED_OUT] ? 'timed out' : e.message.split('\n')[0]}`)
             continue
           }
           for (const id of u.ids) {
             const main = await attempt(u, id, 'recipe', 60000)
             if (!main.ok) fail(2, loc, id, `${engine}: ${main.msg}`)
-            for (let i = 0; i < (CHECKS[id].mutants || []).length; i++)
-              if ((await attempt(u, id, i, 10000)).ok) fail(2, loc, id, `${engine}: check accepts mutant ${i + 1}`)
+            for (let i = 0; i < (CHECKS[id].mutants || []).length; i++) {
+              // rejected: the check failed it, or it hung past the watchdog
+              const r = await attempt(u, id, i, 10000)
+              if (r.ok) fail(2, loc, id, `${engine}: check accepts mutant ${i + 1}`)
+              else if (r.kind === 'error') fail(2, loc, id, `${engine}: mutant ${i + 1} did not run: ${r.msg}`)
+            }
           }
         } catch (e) {
           fail(2, loc, u.block.tags.id[0] || 'block', `${engine}: ${e.message.split('\n')[0]}`)

@@ -20,11 +20,11 @@ Rewrite to target `@chenglou/pretext` 1.0.0 (the skill's own version stays 0.x; 
 - `evals/pretext`: 12 prompts, 57 assertions, run checks, and cowork-harness scenarios. On iteration 1 the new skill passed 57/57 and the 0.0.8-era skill 30/57
 
 ### Fixed
-- An SVG recipe that crashed
-- The public function count
-- The gap that was skipped when drawing rich inline text
-- `prepare` called on every frame in a recipe; it now runs once per text and font
-- False claims about empty blocks and about the streaming demo
+- The SVG recipe crashed: it called `.replace` on each `LayoutLine` object instead of on its `text`. It now paints `line.text` through `paintableText`
+- The public function count was 18 (13 core); it is 17, 12 core and 5 rich-inline, in 0.0.8 as in 1.0.0
+- The rich-inline painting loop drew each fragment before adding its `gapBefore`, so the gap fell after the fragment instead of before it
+- The animated-obstacle recipe called `prepareWithSegments()` on every frame, inside `layoutAroundCircle()`; it now prepares once per text and font
+- Gotcha #8 said browsers size an empty block to one `line-height` and told you to clamp; an empty block is 0 tall, so `layout()`'s 0 matches. The streaming section called upstream's Markdown chat demo the streaming reference; upstream lists streaming as not covered
 
 ### Notes
 - Covers upstream 0.0.9 (bug fixes only) through 1.0.0

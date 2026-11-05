@@ -14,7 +14,7 @@ declare namespace JSX {
 }
 
 // Values a block uses without defining: inputs, DOM nodes and app callbacks the reader supplies.
-declare var text: any, font: any, fontFamily: any, items: any, stream: any, textSoFar: any, textareaValue: any
+declare var props: any, text: any, font: any, fontFamily: any, items: any, stream: any, textSoFar: any, textareaValue: any
 declare var article: any, longText: any, longArticle: any
 declare var width: any, maxWidth: any, containerWidth: any, columnWidth: any, paddingX: any
 declare var lineHeight: any, lineHeightPx: any, lh: any, LH: any, WIDTH: any, FONT: any, BODY_FONT: any

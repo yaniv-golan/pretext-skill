@@ -20,22 +20,25 @@ How Pretext fits into an app: framework components, loading it as an enhancement
 
 ### React
 
-```jsx
+```jsx run id=MeasuredText
 import { useEffect, useState } from 'react'
+import { prepare, layout } from '@chenglou/pretext'
 
 function MeasuredText({ text, font, width, lineHeight }) {
-  const [prepared, setPrepared] = useState(null)
+  const [measured, setMeasured] = useState(null) // { text, font, prepared }
 
   useEffect(() => {
     let current = true
     document.fonts.load(font, text) // a malformed font string rejects here, before prepare() runs
-      .then(() => { if (current) setPrepared(prepare(text, font)) })
+      .then(() => { if (current) setMeasured({ text, font, prepared: prepare(text, font) }) })
       .catch((e) => console.error(e))
     return () => { current = false } // text or font changed before the font loaded
   }, [text, font])
 
-  // undefined until measured: the server render and the first client render agree
-  const height = prepared ? layout(prepared, width, lineHeight).height : undefined
+  // undefined until measured, so the server render and the first client render agree, and
+  // undefined again after text or font changes, until the new handle is ready
+  const fresh = measured?.text === text && measured.font === font
+  const height = fresh ? layout(measured.prepared, width, lineHeight).height : undefined
   return (
     <div style={{ font, lineHeight: `${lineHeight}px`, width, overflowWrap: 'break-word', height }}>
       {text}
@@ -44,7 +47,7 @@ function MeasuredText({ text, font, width, lineHeight }) {
 }
 ```
 
-- The handle goes into state once the font has loaded. Putting a handle in state, or in a store such as Immer's, is fine ([accuracy.md](accuracy.md#outside-the-browser)).
+- The handle goes into state once the font has loaded, with the text and font it was prepared from. A handle for other text would size the new text with the old one's height until the new handle is ready. Putting a handle in state, or in a store such as Immer's, is fine ([accuracy.md](accuracy.md#outside-the-browser)).
 - `width` is the width you set on the element, passed down. A width read back from the page is rounded and scaled under zoom ([accuracy.md](accuracy.md#widths)).
 - `layout()` is arithmetic over the cached widths, so deriving the height on every render is fine. Measuring inside a `ResizeObserver` callback instead goes stale when the text changes without a resize.
 - `useMemo(() => prepare(text, font))` runs during the server render and throws there.
@@ -58,8 +61,12 @@ import { onMounted, shallowRef, watch } from 'vue'
 
 const prepared = shallowRef(null) // shallow: Vue doesn't proxy the handle's internals
 onMounted(() => {
-  watch([text, font], ([t, f]) => {
-    document.fonts.load(f, t).then(() => { prepared.value = prepare(t, f) }).catch((e) => console.error(e))
+  // a getter, since props.text is a plain string; for refs, watch([text, font], ...)
+  watch(() => [props.text, props.font], ([t, f], _, onCleanup) => {
+    prepared.value = null // the old handle doesn't fit the new text
+    let current = true
+    onCleanup(() => { current = false }) // text or font changed before the font loaded
+    document.fonts.load(f, t).then(() => { if (current) prepared.value = prepare(t, f) }).catch((e) => console.error(e))
   }, { immediate: true })
 })
 ```
@@ -70,11 +77,14 @@ Svelte runs `$effect` only in the browser:
 let prepared = $state.raw(null) // raw: no proxy around the handle
 $effect(() => {
   const t = text, f = font // read synchronously, so the effect tracks them
-  document.fonts.load(f, t).then(() => { prepared = prepare(t, f) }).catch((e) => console.error(e))
+  prepared = null // the old handle doesn't fit the new text
+  let current = true
+  document.fonts.load(f, t).then(() => { if (current) prepared = prepare(t, f) }).catch((e) => console.error(e))
+  return () => { current = false } // text or font changed before the font loaded
 })
 ```
 
-In each, prepare once per text, font and options on the client after the font loads, pass the width you set on the element, and call `layout()` whenever the width changes.
+In each, prepare once per text, font and options on the client after the font loads, pass the width you set on the element, and call `layout()` whenever the width changes. Each clears the handle when the text or font changes and drops a result that arrives after a newer change, as the React version does.
 
 ---
 
@@ -97,7 +107,7 @@ try {
 }
 ```
 
-- `e.name` tells the failures apart: a `RangeError` is a bad font string, a plain `Error` is a missing Canvas, and a `SyntaxError` at load means a runtime without Unicode property escapes (`\p{...}`), which Pretext needs.
+- `e.name` tells the failures apart: a `RangeError` is a bad font string, a plain `Error` is a missing Canvas, and a `SyntaxError` thrown by the `import()` itself means a runtime without Unicode property escapes (`\p{...}`), which Pretext needs.
 - Log it rather than swallow it: a fallback that hides a `RangeError` hides a bug in your font strings.
 
 ---

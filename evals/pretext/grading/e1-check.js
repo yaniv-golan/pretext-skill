@@ -9,5 +9,5 @@ export default async (mod, { core }) => {
     const painted = core.measureNaturalWidth(core.prepare(l.text.trimEnd(), F))
     if (l.x + painted > W + 0.5) bad.push(['overflow', l])
   }
-  return { n: lines.length, sameText: lines.map((l) => l.text).join('').replace(/\s+/g, ' ').trim() === T, bad }
+  return { n: lines.length, sameText: lines.map((l) => l.text).join(' ').replace(/\s+/g, ' ').trim() === T, bad }
 }

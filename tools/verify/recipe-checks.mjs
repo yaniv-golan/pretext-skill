@@ -117,10 +117,11 @@ function refSearchOptimalWidth({ ignoreMin = false, resultAtMax = false } = {}) 
   }
 }
 
-function refStreamBlocks({ split = (t) => t.split(/(?<=\n\n)/), whiteSpace = 'pre-wrap', cache: useCache = true } = {}) {
+function refStreamBlocks({ split = (t) => t.split(/(?<=\n\n)/), whiteSpace = 'pre-wrap', cache: useCache = true, evict = false } = {}) {
   return (cache, text, font, width, lineHeight) => {
     let height = 0
-    for (const block of split(text)) {
+    const blocks = split(text)
+    for (const block of blocks) {
       let prepared = useCache ? cache.get(block) : undefined
       if (!prepared) {
         prepared = prepare(block, font, { whiteSpace })
@@ -128,7 +129,46 @@ function refStreamBlocks({ split = (t) => t.split(/(?<=\n\n)/), whiteSpace = 'pr
       }
       height += layout(prepared, width, lineHeight).height
     }
+    if (evict) for (const key of cache.keys()) if (!blocks.includes(key)) cache.delete(key)
     return height
+  }
+}
+
+// follow(stream, bubble, setRowHeight): the streaming loop, with the cache's scope as the fault.
+// cacheScope: 'reply' (one Map per follow() call), 'shared' (one Map for every reply) or 'frame'.
+function refFollow({ cacheScope = 'reply' } = {}) {
+  const streamBlocks = refStreamBlocks({ evict: true })
+  const shared = new Map()
+  return async (stream, bubble, setRowHeight) => {
+    const cache = cacheScope === 'shared' ? shared : new Map()
+    let textSoFar = ''
+    let frame = 0
+    for await (const token of stream) {
+      textSoFar += token
+      bubble.textContent = textSoFar
+      frame ||= requestAnimationFrame(() => {
+        frame = 0
+        setRowHeight(streamBlocks(cacheScope === 'frame' ? new Map() : cache, textSoFar, FONT, 400, 20))
+      })
+    }
+  }
+}
+
+// The React MeasuredText idiom. Mutants run under the block's own React (globalThis.__react), since
+// the harness bundle holds another copy. staleHandle: the 0.3.0 form, which keeps the old handle in
+// state across a text change; neverSized: never sets a height.
+function refMeasuredText({ staleHandle = false, neverSized = false } = {}) {
+  return function MeasuredText({ text, font, width, lineHeight }) {
+    const { useEffect, useState, createElement } = globalThis.__react
+    const [measured, setMeasured] = useState(null)
+    useEffect(() => {
+      let current = true
+      document.fonts.load(font, text).then(() => { if (current) setMeasured({ text, font, prepared: prepare(text, font) }) })
+      return () => { current = false }
+    }, [text, font])
+    const fresh = measured && (staleHandle || (measured.text === text && measured.font === font))
+    const height = fresh && !neverSized ? layout(measured.prepared, width, lineHeight).height : undefined
+    return createElement('div', { style: { font, lineHeight: `${lineHeight}px`, width, overflowWrap: 'break-word', height } }, text)
   }
 }
 
@@ -536,6 +576,75 @@ export default {
       refStreamBlocks({ split: (t) => [t] }),
       refStreamBlocks({ cache: false }),
     ],
+  },
+
+  // MeasuredText({ text, font, width, lineHeight }): React component. Rendered with text A until its
+  // height is set, then re-rendered with text B (more lines): right after that render the div must
+  // have no explicit height (not A's), and then B's.
+  MeasuredText: {
+    async check(Comp) {
+      const { createElement, createRoot, flushSync } = globalThis.__react
+      const A = PARITY_TEXTS[0], B = PARITY_TEXTS[0] + ' ' + PARITY_TEXTS[3]
+      const want = (t) => `${layout(prepare(t, FONT), 200, 20).height}px`
+      assert(want(A) !== want(B), 'test texts have the same height')
+      const host = document.createElement('div')
+      document.body.append(host)
+      const root = createRoot(host)
+      const render = (text) => flushSync(() => root.render(createElement(Comp, { text, font: FONT, width: 200, lineHeight: 20 })))
+      const height = () => host.firstElementChild?.style.height ?? ''
+      const until = async (cond, what) => {
+        for (let i = 0; i < 100 && !cond(); i++) await new Promise((r) => setTimeout(r, 20))
+        assert(cond(), `${what}: height is ${show(height())}`)
+      }
+      try {
+        render(A)
+        await until(() => height() === want(A), `text A never got its height ${want(A)}`)
+        render(B)
+        assert(height() === '', `right after the text changed, the height is ${show(height())}, not unset (A's is ${want(A)})`)
+        await until(() => height() === want(B), `text B never got its height ${want(B)}`)
+      } finally { root.unmount(); host.remove() }
+    },
+    mutants: [refMeasuredText({ staleHandle: true }), refMeasuredText({ neverSized: true })],
+  },
+
+  // follow(stream, bubble, setRowHeight) => Promise<void>. Two replies stream at once, a token per
+  // frame each. A Map.prototype.set spy records every set of a prepared handle by a string key: each
+  // reply must fill one cache of its own, and no cache may get the same whole block twice (a shared cache
+  // evicts the other reply's blocks, which are then prepared again).
+  follow: {
+    async check(fn) {
+      const replies = [STREAM_REPLY, STREAM_REPLY.toUpperCase()]
+      const tokens = (s) => s.match(/[^]{1,6}/g)
+      const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()))
+      async function* stream(s) { for (const t of tokens(s)) { await nextFrame(); yield t } }
+      const sets = new Map() // cache -> keys set, in order
+      const origSet = Map.prototype.set
+      Map.prototype.set = function (k, v) {
+        if (typeof k === 'string' && v && typeof v === 'object' && 'segmentFlags' in v) {
+          if (!sets.has(this)) sets.set(this, [])
+          sets.get(this).push(k)
+        }
+        return origSet.call(this, k, v)
+      }
+      const bubbles = replies.map(() => document.createElement('div'))
+      const heights = replies.map(() => [])
+      try {
+        await Promise.all(replies.map((s, i) => fn(stream(s), bubbles[i], (px) => heights[i].push(px))))
+        for (let i = 0; i < 5; i++) await nextFrame() // the last scheduled frame
+      } finally { Map.prototype.set = origSet }
+      replies.forEach((s, i) => {
+        assert(bubbles[i].textContent === s, `reply ${i + 1}: bubble holds ${show(bubbles[i].textContent.slice(-20))}`)
+        const want = layout(prepare(s, FONT, { whiteSpace: 'pre-wrap' }), 400, 20).height
+        assert(heights[i].at(-1) === want, `reply ${i + 1}: last height ${heights[i].at(-1)}, the whole reply in pre-wrap is ${want}`)
+      })
+      assert(sets.size === replies.length, `${sets.size} caches were filled for ${replies.length} replies`)
+      for (const keys of sets.values()) {
+        // only whole blocks: a partial last block such as 'F' can recur at the start of a later block
+        const twice = keys.find((k, j) => k.endsWith('\n\n') && keys.indexOf(k) !== j)
+        assert(twice === undefined, `block ${show(twice?.slice(0, 20))} was prepared and cached twice`)
+      }
+    },
+    mutants: [refFollow({ cacheScope: 'shared' }), refFollow({ cacheScope: 'frame' })],
   },
 
   // layoutAroundCircle(prepared, containerWidth, lineHeight, { x, y, r }) => { text, width, y, maxWidth, end }[]

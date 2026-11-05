@@ -292,12 +292,13 @@ if (layout(prepared, 300, 20).lineCount > 3) lines[lines.length - 1] += '…'
 - Near a soft hyphen, the cut can fall up to a syllable earlier than the browser's.
 - Measure the tail in the paragraph's font: browsers draw a clamp's ellipsis in the paragraph's first font, per upstream.
 - Paint each line in its own row with `white-space: pre`.
+- The lines are raw `line.text`, so they don't go through [`paintableText`](patterns-flow.md#painting-a-lines-text): a non-last line that breaks at a soft hyphen paints `-`, where its width counted the hyphen glyph, U+2010 where the font has one. To route them through it, keep each line's `end` beside its text.
 
 ---
 
 ## Virtualized lists
 
-A long list mounts only the rows on screen, so it needs every row's height before paint. Pretext gives exact heights, so no estimate has to be corrected later. Upstream's [Markdown chat patterns](https://github.com/chenglou/pretext/blob/v1.0.0/pages/demos/markdown-chat.md) cover this in depth; the essentials:
+A long list mounts only the rows on screen, so it needs every row's height before paint. Pretext gives the heights the browser paints, when the rows are painted as [accuracy.md](accuracy.md#painting) describes, so no estimate has to be corrected later. Upstream's [Markdown chat patterns](https://github.com/chenglou/pretext/blob/v1.0.0/pages/demos/markdown-chat.md) cover this in depth; the essentials:
 
 - **One source for font values.** Keep every font string, line height and padding in your model. Prepare with them, and write them to the CSS (inline or through custom properties) rather than restating them in a stylesheet, where they drift.
 - **Prepare each block once**, when it arrives, and keep the handle. On a width change, lay out again; never prepare again.
@@ -341,7 +342,7 @@ What it costs, from upstream's Markdown chat demo, which prepares every message 
 | 10,000 | 0.65-0.74 s | 48 MB | 7.9-13.1 ms |
 | 100,000 | 4.9-5.4 s | 402 MB | 54.9-55.2 ms |
 
-Upstream adds that 100,000 messages crashed iOS Safari on an iPhone.
+Upstream adds that 100,000 messages crashed iOS Safari on an iPhone, and that "None of this was measured again after [#325](https://github.com/chenglou/pretext/pull/325) simplified painting and [#338](https://github.com/chenglou/pretext/pull/338), [#340](https://github.com/chenglou/pretext/pull/340) and [#344](https://github.com/chenglou/pretext/pull/344) sped up Pretext."
 
 **What Pretext can't size**, so measure it after mount and anchor the scroll around it: images and embeds without known sizes, math, text in a font that hasn't loaded, and text styled with CSS Pretext doesn't model ([accuracy.md](accuracy.md#css-pretext-does-not-model)).
 
@@ -385,11 +386,11 @@ function streamBlocks(cache: Map<string, PreparedText>, text: string, font: stri
 }
 ```
 
-```ts needs=streamBlocks
+```ts run id=follow needs=streamBlocks
 const FONT = '16px Inter'
-const cache = new Map<string, PreparedText>()
 
 async function follow(stream: AsyncIterable<string>, bubble: HTMLElement, setRowHeight: (px: number) => void) {
+  const cache = new Map<string, PreparedText>() // one per reply: streamBlocks evicts every block not in its text
   let textSoFar = ''
   let frame = 0
   for await (const token of stream) {
@@ -406,6 +407,7 @@ async function follow(stream: AsyncIterable<string>, bubble: HTMLElement, setRow
 - **Paint the reply as one element** with `white-space: pre-wrap`, `overflow-wrap: break-word`, the same font and `line-height`, and the content width you passed. In `pre-wrap` every newline is a hard break, so a block's lines never depend on another block's, and the heights add up to the element's.
 - **Keep the blank line with its block**, as `split(/(?<=\n\n)/)` does. Splitting on `'\n\n'` drops the newlines, and the blank lines with them.
 - **Prepare with `pre-wrap`.** In `normal`, newlines collapse to spaces and the heights no longer match the element.
+- **One cache per reply.** `streamBlocks` drops every key that isn't a block of the text it was given, so two replies streaming into one shared cache evict each other's blocks on every frame and prepare them all again.
 - **Reuse only blocks that are unchanged.** Markdown can change an earlier block as the reply grows: a closing `**` or a later `===` line changes what came before. The cache is keyed by block text, so a block whose text changed is prepared again. If you render Markdown, re-parse the whole reply on each update and key the cache by each block's text the same way.
 - Upstream's Markdown chat demo lists streaming as not covered ([issue #313](https://github.com/chenglou/pretext/issues/313)).
 - `prepareRichInline()` also prepares everything again on each call. It is for messages whose items are stable, such as mentions and code spans, not for text that grows token by token.

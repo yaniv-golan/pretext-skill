@@ -49,6 +49,8 @@ grep -rnE --include='*.js' --include='*.jsx' --include='*.ts' --include='*.tsx' 
   -e 'lineEndFitAdvances|lineEndPaintAdvances|breakablePreferredBreaks|spacingGraphemeCounts|\.chunks\b' \
   -e 'breakableFitAdvances|discretionaryHyphenWidth' \
   -e 'pages/demos' \
+  -e 'letterSpacing' \
+  -e 'getComputedStyle\(' \
   .
 ```
 
@@ -67,6 +69,8 @@ What each pattern finds, and where to look next:
 | `lineEndFitAdvances` and the rest | Handle fields that are gone, with no public equivalent | Row 3 |
 | `breakableFitAdvances`, `discretionaryHyphenWidth` | Internal handle fields that no longer type-check, with no public equivalent | Row 3 |
 | `pages/demos` | Imports from the demos, which no longer ship | Row 12 |
+| `letterSpacing` | Letter spacing passed to Pretext, often read from CSS, where `normal` parses to `NaN` | Row 8 |
+| `getComputedStyle(` | Fonts read from the page, which can be `''`, as for an element not in the document | Row 9. The computed style is often kept in a variable, so follow it to where its `font` is used |
 
 The fragment and `widths` patterns go by common variable names, so they can miss code that names things differently. In TypeScript, the type checker finds those, unless the value is `any`.
 
@@ -93,12 +97,25 @@ One row per item of upstream's *Upgrading from 0.0.9*, in its order.
 
 **Row 4 with Canvas.** Take one direction per paragraph from its first strong character, as `dir="auto"` does, and set `ctx.direction` to it for every line of that paragraph. Letters are strong; digits and punctuation are not, so a line starting `42` takes the direction of the letter after it. Neither version gives visual order: `fillText()` orders each line as a paragraph of its own, so a line with mixed directions can still differ from the DOM. A guess per line, as code built on `segLevels` often made, flips at lines that start with an embedded word.
 
+The function below approximates `dir="auto"` for the modern right-to-left scripts. A JavaScript regex has no `Bidi_Class` property, so it lists scripts instead, and a letter of a historic right-to-left script reads as `ltr`.
+
 ```ts
-const RTL = /[\u200F\p{Script=Hebrew}\p{Script=Arabic}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}\p{Script=Adlam}]/u
+const RTL = /[\u200F\u061C\p{Script=Hebrew}\p{Script=Arabic}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}\p{Script=Adlam}\p{Script=Samaritan}\p{Script=Mandaic}\p{Script=Hanifi_Rohingya}\p{Script=Yezidi}]/u
 function paragraphDirection(text: string): CanvasDirection {
-  const first = /[\p{L}\u200E\u200F]/u.exec(text) // a letter, LRM or RLM
+  const first = /[\p{L}\u200E\u200F\u061C]/u.exec(text) // a letter, LRM, RLM or ALM
   return first && RTL.test(first[0]) ? 'rtl' : 'ltr'
 }
+```
+
+**Row 11 with mixed rich arrays.** In an inferred array that mixes text items and boxes, `break: 'never'` widens to `string`, and `prepareRichInline()` rejects the array. With `strict` off, the mix fails even without `break`. A `.map()` that returns text items or boxes, by a ternary or otherwise, needs the annotation on its arrow, `(p): RichInlineItem | RichInlineBox =>`. For an array, annotate the variable:
+
+```ts
+const items: Array<RichInlineItem | RichInlineBox> = [
+  { text: 'Ship ', font: '500 17px Inter' },
+  { text: '@maya', font: '700 12px Inter', break: 'never', extraWidth: 22 },
+  { width: 20 }, // a custom emoji
+]
+const rich = prepareRichInline(items)
 ```
 
 ## Silent changes
@@ -110,16 +127,6 @@ These change results without an error or a type error.
 - **The bundle grew.** Upstream gives about 40 KB gzipped for the main entry and 44 KB for `@chenglou/pretext/rich-inline`, up from about 16 KB each in 0.0.9. See [accuracy.md](accuracy.md#bundle-size).
 - **Persisted handles throw.** A handle made by 0.0.x, as kept in IndexedDB or sent by a worker on an older bundle, throws a `TypeError` in 1.0.0's line functions. Store text, font and options, and prepare again.
 - **An old `catch` may hide a `RangeError`.** Code that wrapped `prepare()` in `try`/`catch`, for example to fall back to DOM measurement, now also catches the new `RangeError` for a bad font or `letterSpacing`, and quietly takes the fallback. Log what the `catch` receives.
-- **Mixed rich arrays need a type annotation.** In an inferred array that mixes text items and boxes, `break: 'never'` widens to `string`, and `prepareRichInline()` rejects the array. With `strict` off, the mix fails even without `break`. A `.map()` that returns text items or boxes, by a ternary or otherwise, needs the annotation on its arrow, `(p): RichInlineItem | RichInlineBox =>`. For an array, annotate the variable:
-
-```ts
-const items: Array<RichInlineItem | RichInlineBox> = [
-  { text: 'Ship ', font: '500 17px Inter' },
-  { text: '@maya', font: '700 12px Inter', break: 'never', extraWidth: 22 },
-  { width: 20 }, // a custom emoji
-]
-const rich = prepareRichInline(items)
-```
 
 ## Optional simplifications
 

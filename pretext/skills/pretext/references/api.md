@@ -374,8 +374,8 @@ Sets the language that later `prepare()`, `prepareWithSegments()` and `prepareRi
 - Internally calls `clearCache()`. Existing handles are not changed. If the page's `lang` changes, prepare your text again.
 
 ```ts
-// In a worker, with the language the page sent: '' for a page without one
-self.onmessage = (event: MessageEvent<{ lang: string }>) => setLocale(event.data.lang)
+// In a worker, once, with the language the page sent first: '' for a page without one
+self.addEventListener('message', (event: MessageEvent<{ lang: string }>) => setLocale(event.data.lang), { once: true })
 ```
 
 ---
