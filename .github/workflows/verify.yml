@@ -1,0 +1,32 @@
+name: Verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools/verify
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Chromium only; the bundled Inter font (via @fontsource/inter) keeps Linux results comparable.
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify skill
+        run: npm run verify

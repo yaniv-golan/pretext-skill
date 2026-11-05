@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "strict": false,
+    "checkJs": true,
+    "allowJs": true,
+    "noEmit": true,
+    "jsx": "preserve",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "skipLibCheck": true
+  },
+  "include": ["prelude.d.ts", "type-claims.ts", ".build/**/*"]
+}
