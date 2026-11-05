@@ -57,9 +57,9 @@ function allLayouts(h) {
 }
 
 const SHY_TEXT =
-  'Inter­nation­ali­za­tion and in­com­pre­hen­si­bil­i­ty meet state-of-the-art ' +
-  'hy­phen­a­tion, while well-known self-contained com­pound-words and ex­tra­or­di­nar­i­ly ' +
-  'long-winded sen­tences keep wrap­ping across many nar­row col­umns.'
+  'Inter\u00ADnation\u00ADali\u00ADza\u00ADtion and in\u00ADcom\u00ADpre\u00ADhen\u00ADsi\u00ADbil\u00ADi\u00ADty meet state-of-the-art ' +
+  'hy\u00ADphen\u00ADa\u00ADtion, while well-known self-contained com\u00ADpound-words and ex\u00ADtra\u00ADor\u00ADdi\u00ADnar\u00ADi\u00ADly ' +
+  'long-winded sen\u00ADtences keep wrap\u00ADping across many nar\u00ADrow col\u00ADumns.'
 
 export const CLAIMS = [
   {
@@ -216,7 +216,7 @@ export const CLAIMS = [
         assert(p.segments.join('') === text, 'segments.join("") differs from the text')
         for (const w of widths()) for (const line of layoutWithLines(p, w, LH).lines) {
           lines++
-          const truth = line.end.graphemeIndex === 0 && line.end.segmentIndex > 0 && p.segments[line.end.segmentIndex - 1].endsWith('­')
+          const truth = line.end.graphemeIndex === 0 && line.end.segmentIndex > 0 && p.segments[line.end.segmentIndex - 1].endsWith('\u00AD')
           const detected = line.text.endsWith('-') && line.end.graphemeIndex === 0 && p.kinds[line.end.segmentIndex - 1] === 'soft-hyphen'
           assert(truth === detected, `w=${w} ${whiteSpace}: detection ${detected} but break at soft hyphen ${truth} for ${JSON.stringify(line.text)}`)
           if (truth) { shy++; assert(line.text.endsWith('-'), `soft-hyphen line does not end in '-': ${JSON.stringify(line.text)}`) }
@@ -264,7 +264,7 @@ export const CLAIMS = [
     run() {
       assert(measureNaturalWidth(prepareWithSegments(' ', FONT)) === 0, 'a lone space has non-zero width')
       assert(measureNaturalWidth(prepareWithSegments(' ', FONT, { whiteSpace: 'pre-wrap' })) > 0, 'pre-wrap space measures 0')
-      assert(measureNaturalWidth(prepareWithSegments(' ', FONT)) > 0, 'U+00A0 measures 0')
+      assert(measureNaturalWidth(prepareWithSegments('\u00A0', FONT)) > 0, 'U+00A0 measures 0')
     },
   },
   {

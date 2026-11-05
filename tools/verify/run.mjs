@@ -47,6 +47,8 @@ const SCOPE = process.env.SCOPE || 'all'
 
 const names = pretextNames()
 const blocks = loadBlocks(SKILL)
+const { CLAIMS } = await import('./claims.mjs')
+const CLAIM_IDS = new Set(CLAIMS.map((c) => c.id))
 fs.rmSync(BUILD, { recursive: true, force: true })
 fs.mkdirSync(path.join(BUILD, 'g1'), { recursive: true })
 fs.mkdirSync(path.join(BUILD, 'g3'), { recursive: true })
@@ -61,7 +63,9 @@ await guard(1, () => {
     const abs = path.join(BUILD, 'g1', `${b.file.replace(/[/.]/g, '_')}-L${b.line}.${mod.ext}`)
     fs.writeFileSync(abs, mod.code)
     g1Files.set(abs, { block: b, map: mod.map })
-    if (!b.tags.claim) b.body.split('\n').forEach((l, i) => {
+    const knownClaim = b.tags.claim && CLAIM_IDS.has(b.tags.claim)
+    if (b.tags.claim && !knownClaim) fail(1, `${b.file}:${b.line}`, 'claim', `unknown claim id ${b.tags.claim}`)
+    if (!knownClaim) b.body.split('\n').forEach((l, i) => {
       if (/\/\/\s*→.*\d/.test(l)) fail(1, `${b.file}:${b.bodyLine + i}`, 'arrow', `numeric // → output without claim=: ${l.trim()}`)
     })
   }
@@ -159,7 +163,8 @@ await guard(3, () => {
   for (const t of dtsTypes) if (!SKIP.has(t.name) && !docCanon.has(t.canon)) fail(3, '<none>:0', t.name, 'undocumented')
   // gate3:no-stale
   for (const d of docs) if (!dtsCanon.has(d.canon)) fail(3, `${d.file}:${d.line}`, d.name, 'stale')
-  // gate3:doc-blocks-compile: first failing doc block per module
+  // gate3:doc-blocks-compile: first failing doc block per module (and nothing proven if tsc didn't run)
+  for (const d of diags) if (!d.file) fail(3, '<none>:0', 'compile', `${d.code} ${d.msg}`)
   for (const [abs, { file, map }] of g3Files) {
     const ds = diags.filter((d) => d.file === abs).sort((a, b) => a.line - b.line)
     if (!ds.length) continue
@@ -178,7 +183,6 @@ function unionsFrom(file) {
 }
 
 // ---------- gates 2 and 4: browser and Node ----------
-const { CLAIMS } = await import('./claims.mjs')
 const CHECKS = (await import('./recipe-checks.mjs')).default
 const claimsSrc = fs.readFileSync(path.join(HERE, 'claims.mjs'), 'utf8').split('\n')
 const claimLoc = (id) => `claims.mjs:${claimsSrc.findIndex((l) => l.includes(`id: '${id}'`)) + 1}`
@@ -221,18 +225,21 @@ await guard(2, async () => {
 })
 
 // Node claims, each in its own process
+const NODE_CLAIM_MS = 60000
 await guard(4, () => {
   for (const c of CLAIMS) {
     if (!c.engines.includes('node')) continue
-    const r = spawnSync(process.execPath, [THIS, '--node-claim', c.id], { cwd: HERE, encoding: 'utf8', timeout: 60000 })
+    const r = spawnSync(process.execPath, [THIS, '--node-claim', c.id], { cwd: HERE, encoding: 'utf8', timeout: NODE_CLAIM_MS })
     let res
-    try { res = JSON.parse(r.stdout.trim().split('\n').pop()) } catch { res = { ok: false, msg: `child failed: ${oneLine(r.stderr).slice(0, 300)}` } }
+    if (r.error?.code === 'ETIMEDOUT' || r.signal) res = { ok: false, msg: r.error?.code === 'ETIMEDOUT' ? `timed out after ${NODE_CLAIM_MS}ms` : `killed by ${r.signal}` }
+    else try { res = JSON.parse(r.stdout.trim().split('\n').pop()) } catch { res = { ok: false, msg: `child failed: ${oneLine(r.stderr).slice(0, 300)}` } }
     if (!res.ok) fail(4, claimLoc(c.id), c.id, `node: ${res.msg}`)
   }
 })
 
 // type-claims.ts
 await guard(4, () => {
+  for (const d of diags) if (!d.file) fail(4, 'type-claims.ts:0', 'types', `${d.code} ${d.msg}`)
   for (const d of diags) if (d.file === path.join(HERE, 'type-claims.ts')) fail(4, `type-claims.ts:${d.line}`, 'types', `${d.code} ${d.msg}`)
 })
 
@@ -277,33 +284,49 @@ for (const engine of BROWSERS) {
       return route.fulfill({ status: 404, body: '' })
     })
 
-    // gate 2: each run block loads (5 s watchdog), then its checks pass and its mutants fail
+    // gate 2: each run block loads (5 s watchdog). Then, on a fresh page each, its check runs on the
+    // documented recipe (must pass within 60 s) and on every mutant (must fail; a mutant that hangs past
+    // 10 s counts as rejected). A synchronous hang blocks the whole page, hence one page per function.
+    const loadBlock = async (u) => {
+      const page = await withTimeout(openPage(context), 30000)
+      try {
+        await withTimeout(page.evaluate((n) => import(`/b/${n}.js`).then(() => {}), u.bundle), 5000, () => page.close().catch(() => {}))
+      } catch (e) { await page.close().catch(() => {}); throw e }
+      return page
+    }
+    // target: 'recipe' or a mutant index. Resolves { ok } or { ok: false, msg, timeout }.
+    const attempt = async (u, id, target, ms) => {
+      let page
+      try {
+        page = await loadBlock(u)
+        const msg = await withTimeout(page.evaluate(async ({ id, target, engine }) => {
+          const entry = globalThis.__checks[id]
+          const fn = target === 'recipe' ? globalThis.__recipes[id] : entry.mutants[target]
+          try { return (await entry.check(fn, { engine })) === false ? 'check returned false' : null } catch (e) { return String(e?.message || e) }
+        }, { id, target, engine }), ms, () => page.close().catch(() => {}))
+        return msg ? { ok: false, msg } : { ok: true }
+      } catch (e) {
+        const timeout = /timed out|Target page, context or browser has been closed/.test(e.message)
+        return { ok: false, timeout, msg: timeout ? 'timed out' : e.message.split('\n')[0] }
+      } finally { await page?.close().catch(() => {}) }
+    }
     await guard(2, async () => {
       for (const u of blockUnits) {
         const loc = `${u.block.file}:${u.block.line}`
-        const page = await openPage(context)
         try {
-          try {
-            await withTimeout(page.evaluate((n) => import(`/b/${n}.js`).then(() => {}), u.bundle), 5000, () => page.close().catch(() => {}))
-          } catch (e) {
-            fail(2, loc, u.block.tags.id[0] || 'load', `${engine}: ${e.message.split('\n')[0]}`)
+          try { await (await loadBlock(u)).close() } catch (e) {
+            fail(2, loc, u.block.tags.id[0] || 'load', `${engine}: ${/timed out/.test(e.message) ? 'timed out' : e.message.split('\n')[0]}`)
             continue
           }
           for (const id of u.ids) {
-            const r = await withTimeout(page.evaluate(async ({ id, engine }) => {
-              const entry = globalThis.__checks[id]
-              const attempt = async (fn) => {
-                try { return (await entry.check(fn, { engine })) === false ? 'check returned false' : null } catch (e) { return String(e?.message || e) }
-              }
-              const main = await attempt(globalThis.__recipes[id])
-              const accepted = []
-              for (const [i, m] of (entry.mutants || []).entries()) if ((await attempt(m)) === null) accepted.push(i + 1)
-              return { main, accepted }
-            }, { id, engine }), 60000, () => page.close().catch(() => {}))
-            if (r.main) fail(2, loc, id, `${engine}: ${r.main}`)
-            for (const n of r.accepted) fail(2, loc, id, `check accepts mutant ${n}`)
+            const main = await attempt(u, id, 'recipe', 60000)
+            if (!main.ok) fail(2, loc, id, `${engine}: ${main.msg}`)
+            for (let i = 0; i < (CHECKS[id].mutants || []).length; i++)
+              if ((await attempt(u, id, i, 10000)).ok) fail(2, loc, id, `${engine}: check accepts mutant ${i + 1}`)
           }
-        } finally { await page.close().catch(() => {}) }
+        } catch (e) {
+          fail(2, loc, u.block.tags.id[0] || 'block', `${engine}: ${e.message.split('\n')[0]}`)
+        }
       }
     })
 
