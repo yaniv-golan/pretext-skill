@@ -17,15 +17,17 @@ globalThis.__fontsReady = (async () => {
     await face.load()
   }
   await document.fonts.load('16px Inter', 'abc')
-  // Test fonts for fontDrawsU2010, from the same latin file. InterNo has no U+2010 (its range stops at
-  // U+00FF). InterWide draws U+2010 from a face scaled to 150%, so it is wider than '-'.
+  // Test fonts for fontDrawsU2010. InterNo has no U+2010 (its range stops at U+00FF). InterWide draws
+  // U+2010 from a face scaled to 150%, so it is wider than '-'. The Inter latin file has no U+2010
+  // glyph: macOS engines still draw one in its face, but Linux Chromium falls back to a system font,
+  // so that face uses fonts/hyphen-u2010.woff2, Inter's hyphen glyph mapped to U+2010.
   const latin = '/fonts/inter-latin-400-normal.woff2'
-  for (const [family, unicodeRange, sizeAdjust] of [
-    ['InterNo', 'U+0000-00FF', '100%'],
-    ['InterWide', 'U+0000-200F,U+2011-FFFF', '100%'],
-    ['InterWide', 'U+2010', '150%'],
+  for (const [family, url, unicodeRange, sizeAdjust] of [
+    ['InterNo', latin, 'U+0000-00FF', '100%'],
+    ['InterWide', latin, 'U+0000-200F,U+2011-FFFF', '100%'],
+    ['InterWide', '/fonts/hyphen-u2010.woff2', 'U+2010', '150%'],
   ]) {
-    const face = new FontFace(family, `url(${latin})`, { unicodeRange, sizeAdjust, weight: '400', style: 'normal' })
+    const face = new FontFace(family, `url(${url})`, { unicodeRange, sizeAdjust, weight: '400', style: 'normal' })
     document.fonts.add(face)
     await face.load()
   }

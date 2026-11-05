@@ -466,11 +466,32 @@ export default {
   // bubbleWidth(text, font, maxWidth, padding) => number
   bubbleWidth: {
     check(fn) {
-      for (const text of PARITY_TEXTS) for (let w = 120; w <= 400; w += 20) for (const padding of [0, 12]) {
-        const want = Math.min(Math.ceil(measureLineStats(prepare(text, FONT), w).maxLineWidth), w)
-        const r = fn(text, FONT, w, padding)
-        assert(r - 2 * padding === want, `${show(text.slice(0, 16))} w=${w} padding=${padding}: ${r}, expected ${want + 2 * padding}`)
-      }
+      // Linux Chromium measures web fonts in whole px, where rounding up and down agree. So the cases
+      // run in FONT and again in FRACTIONAL, whose canvas widths are scaled by 1.1 (a stand-in for the
+      // fractional advances of macOS), and some FRACTIONAL line must be fractional and round up.
+      const FRACTIONAL = '17px Inter' // not measured anywhere else on the page
+      // Pretext measures on an OffscreenCanvas where there is one.
+      const protos = [globalThis.OffscreenCanvasRenderingContext2D, CanvasRenderingContext2D].filter(Boolean).map((c) => c.prototype)
+      const originals = protos.map((proto) => proto.measureText)
+      protos.forEach((proto, i) => {
+        proto.measureText = function (s) {
+          const m = originals[i].call(this, s)
+          if (this.font !== FRACTIONAL) return m
+          const { width, actualBoundingBoxLeft, actualBoundingBoxRight } = m
+          return { width: width * 1.1, actualBoundingBoxLeft: actualBoundingBoxLeft * 1.1, actualBoundingBoxRight: actualBoundingBoxRight * 1.1 }
+        }
+      })
+      try {
+        let roundsUp = 0
+        for (const font of [FONT, FRACTIONAL]) for (const text of PARITY_TEXTS) for (let w = 120; w <= 400; w += 20) for (const padding of [0, 12]) {
+          const { maxLineWidth } = measureLineStats(prepare(text, font), w)
+          const want = Math.min(Math.ceil(maxLineWidth), w)
+          if (font === FRACTIONAL && Math.floor(maxLineWidth) < want) roundsUp++
+          const r = fn(text, font, w, padding)
+          assert(r - 2 * padding === want, `${font} ${show(text.slice(0, 16))} w=${w} padding=${padding}: ${r}, expected ${want + 2 * padding}`)
+        }
+        assert(roundsUp > 0, `corpus too weak: no ${FRACTIONAL} line width rounds up (is the measureText double engaged?)`)
+      } finally { protos.forEach((proto, i) => { proto.measureText = originals[i] }) }
     },
     mutants: [
       (text, font, maxWidth, padding) => maxWidth + 2 * padding,

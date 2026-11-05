@@ -296,6 +296,7 @@ for (const engine of BROWSERS) {
       const p = new URL(route.request().url()).pathname
       if (p === '/') return route.fulfill({ contentType: 'text/html', body: INDEX })
       if (p === '/fixtures.js') return route.fulfill({ contentType: 'text/javascript', path: path.join(HERE, 'fixtures.js') })
+      if (p === '/fonts/hyphen-u2010.woff2') return route.fulfill({ contentType: 'font/woff2', path: path.join(HERE, 'fonts/hyphen-u2010.woff2') })
       if (p.startsWith('/fonts/')) return route.fulfill({ contentType: 'font/woff2', path: path.join(FONT_DIR, path.basename(p)) })
       const m = /^\/b\/(\w+)\.js$/.exec(p)
       if (m && bundles.has(m[1])) return route.fulfill({ contentType: 'text/javascript', body: bundles.get(m[1]) })
