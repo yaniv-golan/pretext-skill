@@ -1,0 +1,25 @@
+name: e6-nextjs-client-measure
+session: _session.yaml
+fidelity: hostloop
+prompt: 'Next.js 15, app router. I want a `MeasuredTitle` component that reserves the exact height of
+  a wrapped title with @chenglou/pretext so the page doesn''t jump. It gets used from server-rendered
+  pages.
+
+
+  Write `MeasuredTitle.tsx` with a default export taking `{ text, font, width, lineHeight }`.
+
+
+  Save every file you produce directly in {{workspaceFolder}}.'
+assert:
+- result: success
+- skill_triggered: pretext
+- user_visible_artifact: outputs/MeasuredTitle.tsx
+- semantic_matches:
+    rubric:
+    - 'In MeasuredTitle.tsx prepare() or prepareWithSegments() runs only in useEffect, useLayoutEffect,
+      an event handler or a component loaded with ssr: false. It is not in the render body, useMemo, a
+      useState initializer or at module scope.'
+    - MeasuredTitle.tsx starts with the 'use client' directive, or the measuring part lives in a client
+      component it imports.
+    evidence_files:
+    - outputs/MeasuredTitle.tsx

@@ -172,7 +172,7 @@ type RichInlineStats = {
 
 ## Items and boxes
 
-**Declare a mixed list as `Array<RichInlineItem | RichInlineBox>`.** Without the annotation, TypeScript widens `break: 'never'` in an array literal to `string`, and the list no longer type-checks at `prepareRichInline()`. Don't fix it with a list declared `as const`: that makes a readonly tuple, which `prepareRichInline()` rejects (TS4104). An array literal written inline in the call, `prepareRichInline([...] as const)` included, compiles, because the parameter type guides it. When you read an item back, check that it has text before you read its font, since an entry may be a box:
+**Declare a mixed list as `Array<RichInlineItem | RichInlineBox>`.** Without the annotation, TypeScript widens `break: 'never'` in an array literal to `string`, and the list no longer type-checks at `prepareRichInline()`. With `strict` off, the mix fails even without `break`. Don't fix it with a list declared `as const`: that makes a readonly tuple, which `prepareRichInline()` rejects (TS4104). An array literal written inline in the call, `prepareRichInline([...] as const)` included, compiles, because the parameter type guides it. That covers array literals only. A `.map()` that returns text items or boxes, by a ternary or otherwise, needs the annotation on its arrow: `parts.map((p): RichInlineItem | RichInlineBox => ...)` compiles under either `strict` setting. Without it, a `break: 'never'` branch fails when the result goes into an unannotated variable, and with `strict` off every such `.map()` fails, passed inline or into an annotated variable too. When you read an item back, check that it has text before you read its font, since an entry may be a box:
 
 ```ts
 const items: Array<RichInlineItem | RichInlineBox> = [

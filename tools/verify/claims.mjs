@@ -240,6 +240,29 @@ export const CLAIMS = [
     },
   },
   {
+    id: 'rich-old-cursor-reads', source: PROBE + '; dist/rich-inline.js materializeRichInlineLineRange', engines: BROWSERS,
+    run() {
+      for (const items of [[{ text: 'Ship', font: FONT }, { text: ' it now', font: FONT }], [{ text: 'Ship it now', font: FONT }]]) {
+        const p = prepareRichInline(items)
+        const frags = []
+        walkRichInlineLineRanges(p, 400, (r) => frags.push(...materializeRichInlineLineRange(p, r).fragments))
+        assert(frags.length > 0, 'no fragments')
+        for (const f of frags) assert(f.start && f.end && f.end.graphemeIndex === 0 && f.sourceEnd > 0, `fragment ${JSON.stringify(f)}`)
+      }
+    },
+  },
+  {
+    id: 'no-break-not-a-kind', source: PROBE + '; the four characters are 0.0.8 src/analysis.ts glue', engines: BROWSERS,
+    run() {
+      const nbsp = prepareWithSegments('10\u00A0km away', FONT)
+      assert(eq([...nbsp.segments], ['10\u00A0km', ' ', 'away']) && eq([...nbsp.kinds], ['text', 'space', 'text']), `segments ${JSON.stringify(nbsp.segments)}, kinds ${JSON.stringify(nbsp.kinds)}`)
+      assert(eq([...prepareWithSegments('\u00A0\u00A0', FONT).kinds], ['text']), 'a run of no-break spaces is not one text segment')
+      for (const ch of ['\u00A0', '\u202F', '\u2060', '\uFEFF'])
+        assert(eq([...prepareWithSegments(`a${ch}b`, FONT).kinds], ['text']), `U+${ch.codePointAt(0).toString(16)} is not inside a text segment`)
+      assert(prepareWithSegments('10 km away', FONT).kinds.includes('text'), 'plain text has no text kind')
+    },
+  },
+  {
     id: 'deep-freeze', source: PROBE, engines: BROWSERS,
     run() {
       const deepFreeze = (o) => { for (const v of Object.values(o)) if (v && typeof v === 'object') deepFreeze(v); return Object.freeze(o) }

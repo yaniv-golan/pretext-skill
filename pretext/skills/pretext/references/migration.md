@@ -35,11 +35,15 @@ JavaScript gets no type errors, and some old code compiles but behaves different
 grep -rnE --include='*.js' --include='*.jsx' --include='*.ts' --include='*.tsx' \
   --include='*.mjs' --include='*.cjs' --include='*.vue' --include='*.svelte' \
   --exclude-dir=node_modules --exclude-dir=dist \
-  -e 'layoutNextLine(Range)?\(' \
+  -e '\blayoutNextLine(Range)?\b' \
   -e "segLevels|[\"']glue[\"']" \
   -e 'frag[[:alnum:]_]*(\[[^]]*\])?\.(start|end)\b' \
+  -e '\b(start|end)\.(graphemeIndex|segmentIndex)\b' \
+  -e '\{[^}]*\b(start|end)\b[^}]*\}[[:space:]]*(=[^=>]|:|\)[[:space:]]*=>|of\b)' \
   -e 'setLocale\(' \
   -e '\.map\(.*prepareRichInline' \
+  -e '\bprepareRichInline[[:space:]]*([,)]|$)' \
+  -e '\b(prepareRichInline|setLocale) as |= *[[:alnum:]_.]*(prepareRichInline|setLocale)[;[:space:]]*$' \
   -e 'extraWidth' \
   -e 'widths\.(map|filter|reduce|forEach|slice|some|every|find|indexOf|includes|join|concat|sort|entries|keys|values)\b|\.\.\.[[:alnum:]_.]*widths\b|of [[:alnum:]_.]*widths\b' \
   -e 'lineEndFitAdvances|lineEndPaintAdvances|breakablePreferredBreaks|spacingGraphemeCounts|\.chunks\b' \
@@ -52,18 +56,21 @@ What each pattern finds, and where to look next:
 
 | Pattern | Finds | Fix |
 |---|---|---|
-| `layoutNextLine(Range)?\(` | Every call to the two line iterators | Row 1 of [Breaking changes](#breaking-changes). Check every call, since an old-order call never returns `null` and the loop never ends |
+| `layoutNextLine`, `layoutNextLineRange` | Every call to the two line iterators, their imports, and any alias: `layoutNextLine as next`, `const next = layoutNextLine` | Row 1 of [Breaking changes](#breaking-changes). Check every call, since an old-order call never returns `null` and the loop never ends. For an alias, search for its name too, since its calls don't match |
 | `segLevels`, `'glue'` | Removed bidi levels and a removed segment kind | Rows 4 and 5 |
-| `frag….start`, `frag….end` | Rich-inline fragment cursors read as text offsets | Row 2. Names vary, so also check other reads of a fragment's `start` and `end` |
+| `frag….start`, `frag….end`, `.start.graphemeIndex`, `{ start, end } =` | Rich-inline fragment cursors read as text offsets, under any name or destructured | Row 2. Names vary, so also check other reads of a fragment's `start` and `end`. The same read of a line's cursor, such as `line.start.graphemeIndex`, is fine |
 | `setLocale\(` | Locale calls, whose meaning changed | Row 6 |
-| `.map(…prepareRichInline` | Rich-inline preparation inside `map()` | Row 11. Also check for one `prepareRichInline()` per item, which [Silent changes](#silent-changes) covers |
+| `.map(…prepareRichInline`, a bare `prepareRichInline` | Rich-inline preparation inside `map()`, on one line or split over several. The bare name also hits imports, which need nothing | Row 11. Also check for one `prepareRichInline()` per item, which [Silent changes](#silent-changes) covers |
+| `prepareRichInline as`, `setLocale as`, `= prepareRichInline` | Aliases of these two | Search for the alias's name, then rows 11 and 6 |
 | `extraWidth` | Padded items, and characters padded out to stand in for an image | An image stand-in becomes a box: see [Optional simplifications](#optional-simplifications) |
 | `widths.reduce(`, `...widths`, `of widths` | Array methods, spread and loops over `widths` | Row 3 |
 | `lineEndFitAdvances` and the rest | Handle fields that are gone, with no public equivalent | Row 3 |
 | `breakableFitAdvances`, `discretionaryHyphenWidth` | Internal handle fields that no longer type-check, with no public equivalent | Row 3 |
 | `pages/demos` | Imports from the demos, which no longer ship | Row 12 |
 
-The fragment and `widths` patterns go by common variable names, so they can miss code that names things differently. In TypeScript, the type checker finds those.
+The fragment and `widths` patterns go by common variable names, so they can miss code that names things differently. In TypeScript, the type checker finds those, unless the value is `any`.
+
+A grep still can't see calls through a wrapper or a re-export, or a fragment read through a helper or a destructure split over lines: read the code around each hit for those.
 
 ## Breaking changes
 
@@ -72,10 +79,10 @@ One row per item of upstream's *Upgrading from 0.0.9*, in its order.
 | # | Change | Before | After |
 |---|---|---|---|
 | 1 | The line iterators take the width before the cursor, and the cursor is optional. An old-order call in JavaScript never returns `null`, so its loop never ends | `layoutNextLine(prepared, cursor, width)`, `layoutNextLineRange(prepared, cursor, width)` | `layoutNextLine(prepared, width, cursor)`, `layoutNextLineRange(prepared, width, cursor)`, and `layoutNextLine(prepared, width)` for the first line |
-| 2 | Rich-inline cursors are only for passing back. A materialized fragment has no `start` or `end` | `text.slice(fragment.start.graphemeIndex)` and other reads of `fragment.start` or `fragment.end` | `item.text.slice(fragment.sourceStart, fragment.sourceEnd)`, and pass back the range: `materializeRichInlineLineRange(prepared, range)` |
+| 2 | Rich-inline cursors are only for passing back. A fragment's `start` and `end` were never text offsets: in 0.0.x too they are cursors into the item's segments, so `fragment.end.graphemeIndex` reads as 0 wherever a line breaks between segments. 1.0.0 adds `sourceStart` and `sourceEnd` and drops `start` and `end` from a materialized fragment's type, but still returns them, so JavaScript and code typed `any` keep getting wrong offsets with no error | `text.slice(fragment.start.graphemeIndex)` and other reads of `fragment.start` or `fragment.end` | `item.text.slice(fragment.sourceStart, fragment.sourceEnd)`, and pass back the range: `materializeRichInlineLineRange(prepared, range)` |
 | 3 | A `prepareWithSegments()` handle is typed as `segments`, `kinds` and `widths` only, all read-only. `widths` is `ArrayLike<number>` | `prepared.widths.reduce((a, b) => a + b, 0)`, `prepared.lineEndFitAdvances` | `measureNaturalWidth(prepared)` for the text's width, `line.width` for a line's, `Array.from(prepared.widths)` or `prepared.segments.slice()` for a copy |
-| 4 | `segLevels` is gone | `prepared.segLevels` | One DOM element per paragraph with `dir` set: see [accuracy.md](accuracy.md#painting) |
-| 5 | Segment kinds: `'glue'` is gone, and `'zero-width-glue'` and `'control'` are new | `kind === 'glue'` | `kind === 'text'`, since a run of no-break spaces is now `'text'` |
+| 4 | `segLevels` is gone, and 1.0.0 has no other bidi or direction API | `prepared.segLevels` | One DOM element per paragraph with `dir` set: see [accuracy.md](accuracy.md#painting). For Canvas, see below |
+| 5 | Segment kinds: `'glue'` is gone, and `'zero-width-glue'` and `'control'` are new. No kind marks a no-break space: it is part of a `'text'` segment, as in `'10\u00A0km away'`, which segments as `['10\u00A0km', ' ', 'away']` | `kind === 'glue'` | Test the characters of the source text, not `kinds`: `/[\u00A0\u202F\u2060\uFEFF]/.test(text)`, the four characters `'glue'` stood for. This is not the old result: 0.0.x also folded a no-break space inside a word into its `'text'` segment, so `kind === 'glue'` was false for `'10\u00A0km away'` and the test above is true. Check what callers expect. `kind === 'text'` is no replacement, since it's true for nearly any text |
 | 6 | `setLocale(locale)` replaces `<html lang>` for later preparations | `setLocale(navigator.language)`, `setLocale('')` to reset | `setLocale(document.documentElement.lang)`, or drop the call; `setLocale()` to reset |
 | 7 | Don't deep-freeze a handle, and prepare again in place of an old version's handle | `deepFreeze(prepared)`, a handle read back from IndexedDB | `Object.freeze(prepared)` or Immer's `freeze()`; `prepare(text, font)` again |
 | 8 | A `letterSpacing` that isn't finite throws a `RangeError` | `{ letterSpacing: parseFloat(style.letterSpacing) }`, which is `NaN` for `normal` | `{ letterSpacing: parseFloat(style.letterSpacing) || 0 }` |
@@ -83,6 +90,16 @@ One row per item of upstream's *Upgrading from 0.0.9*, in its order.
 | 10 | A `break: 'never'` item's own leading and trailing white space makes no gap, and an atomic item of only white space is an empty box as wide as its `extraWidth` | `{ text: ' @maya ', font, break: 'never' }` | `{ text: 'Ship ', font }, { text: '@maya', font, break: 'never' }`, with the space in the text beside it |
 | 11 | TypeScript: a list entry may be a box, a run type can't carry `width`, hand-built fragments need the new fields, and `map()` needs an arrow | `paragraphs.map(prepareRichInline)`, `item.font` on an entry of the list | `paragraphs.map(items => prepareRichInline(items))`, `'text' in item ? item.font : null` |
 | 12 | The demos are in the repository, not in the installed module | `import … from '@chenglou/pretext/pages/demos/…'` | Copy the code from [pages/demos at v1.0.0](https://github.com/chenglou/pretext/tree/v1.0.0/pages/demos) |
+
+**Row 4 with Canvas.** Take one direction per paragraph from its first strong character, as `dir="auto"` does, and set `ctx.direction` to it for every line of that paragraph. Letters are strong; digits and punctuation are not, so a line starting `42` takes the direction of the letter after it. Neither version gives visual order: `fillText()` orders each line as a paragraph of its own, so a line with mixed directions can still differ from the DOM. A guess per line, as code built on `segLevels` often made, flips at lines that start with an embedded word.
+
+```ts
+const RTL = /[\u200F\p{Script=Hebrew}\p{Script=Arabic}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}\p{Script=Adlam}]/u
+function paragraphDirection(text: string): CanvasDirection {
+  const first = /[\p{L}\u200E\u200F]/u.exec(text) // a letter, LRM or RLM
+  return first && RTL.test(first[0]) ? 'rtl' : 'ltr'
+}
+```
 
 ## Silent changes
 
@@ -93,7 +110,7 @@ These change results without an error or a type error.
 - **The bundle grew.** Upstream gives about 40 KB gzipped for the main entry and 44 KB for `@chenglou/pretext/rich-inline`, up from about 16 KB each in 0.0.9. See [accuracy.md](accuracy.md#bundle-size).
 - **Persisted handles throw.** A handle made by 0.0.x, as kept in IndexedDB or sent by a worker on an older bundle, throws a `TypeError` in 1.0.0's line functions. Store text, font and options, and prepare again.
 - **An old `catch` may hide a `RangeError`.** Code that wrapped `prepare()` in `try`/`catch`, for example to fall back to DOM measurement, now also catches the new `RangeError` for a bad font or `letterSpacing`, and quietly takes the fallback. Log what the `catch` receives.
-- **Mixed rich arrays need a type annotation.** In an inferred array that mixes text items and boxes, `break: 'never'` widens to `string`, and `prepareRichInline()` rejects the array. Annotate it:
+- **Mixed rich arrays need a type annotation.** In an inferred array that mixes text items and boxes, `break: 'never'` widens to `string`, and `prepareRichInline()` rejects the array. With `strict` off, the mix fails even without `break`. A `.map()` that returns text items or boxes, by a ternary or otherwise, needs the annotation on its arrow, `(p): RichInlineItem | RichInlineBox =>`. For an array, annotate the variable:
 
 ```ts
 const items: Array<RichInlineItem | RichInlineBox> = [

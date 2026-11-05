@@ -1,0 +1,26 @@
+name: e9-pinned-0.0.8-obstacle-flow
+session: _session.yaml
+fidelity: hostloop
+prompt: "Here's our package.json:\n\n```json\n{\n  \"name\": \"landing\",\n  \"type\": \"module\",\n \
+  \ \"dependencies\": {\n    \"@chenglou/pretext\": \"^0.0.8\",\n    \"vite\": \"^7.0.0\"\n  }\n}\n```\n\
+  \nThe landing page hero is painted on a canvas. Add text flow around a circular avatar: export `flowAroundCircle(text,\
+  \ font, lineHeight, columnWidth, circle)` from `hero-flow.js`, where `circle` is `{ cx, cy, r }`, returning\
+  \ `{ text, x, y }` per line. Save your package.json as well, changed or not, and put anything I should\
+  \ know in `notes.md`.\n\nSave every file you produce directly in {{workspaceFolder}}."
+assert:
+- result: success
+- skill_triggered: pretext
+- user_visible_artifact: outputs/hero-flow.js
+- user_visible_artifact: outputs/package.json
+- user_visible_artifact: outputs/notes.md
+- semantic_matches:
+    rubric:
+    - notes.md names the installed line, 0.0.8, as a version that matters to the code.
+    - 'notes.md says explicitly which path was taken: upgraded to 1.0.0, or stayed on 0.0.8.'
+    - 'The signature matches the path taken: upgraded means (prepared, width, cursor) and the saved package.json
+      requires ^1.0.0 or later; stayed means (prepared, cursor, width) with a cursor object on the first
+      call and package.json unchanged.'
+    evidence_files:
+    - outputs/hero-flow.js
+    - outputs/package.json
+    - outputs/notes.md

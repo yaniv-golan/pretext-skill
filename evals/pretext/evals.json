@@ -1,0 +1,194 @@
+{
+  "skill_name": "pretext",
+  "grading": {
+    "prefixes": {
+      "[tsc]": "Run the type check below.",
+      "[static]": "Read the output code. Comments don't count as code.",
+      "[run]": "Run the generated code. The checks are in evals/pretext/grading/; e1-check.js and the others are named in each assertion.",
+      "[read]": "Read the named output file, and the transcript where the assertion says so."
+    },
+    "typecheck": {
+      "script": "evals/pretext/grading/typecheck.sh <file> [1.0.0|0.0.8]",
+      "how": "Copy the file into an empty scratch directory whose node_modules is a symlink to tools/verify/node_modules, then run the command there. Naming a file makes tsc ignore any tsconfig, so tools/verify/prelude.d.ts, which declares many names as any, can't hide undefined variables. --strict false matches tools/verify/tsconfig.json; without it TypeScript 7 defaults to strict and fails every untyped JS parameter.",
+      "command": "node <repo>/tools/verify/node_modules/typescript/bin/tsc --noEmit --strict false --allowJs --checkJs --skipLibCheck --target es2022 --module esnext --moduleResolution bundler --lib es2022,dom,dom.iterable --jsx preserve <file>",
+      "pass": "Exit code 0.",
+      "old_version": "For E9's stay-on-0.0.8 path, typecheck.sh reads the old package from evals/pretext-workspace/pretext-0.0.8/package. evals/pretext-workspace is gitignored scratch, so recreate the copy from the repo root: `mkdir -p evals/pretext-workspace/pretext-0.0.8 && ( cd evals/pretext-workspace/pretext-0.0.8 && npm pack @chenglou/pretext@0.0.8 && tar -xzf chenglou-pretext-0.0.8.tgz )`. tar unpacks it into package/."
+    },
+    "watchdog": "run-export.mjs bundles the generated module with esbuild against the pinned package and calls its check in a fresh Chromium page from tools/verify's Playwright. A check that doesn't return in 5 s, the verifier's gate-2 limit, prints ok:false, timeout:true and fails the assertion. A synchronous hang blocks the page, so a hang can only be judged one function at a time.",
+    "isolation": "Runs must not be able to read this file, evals/pretext/grading, tools/verify/node_modules or, for baseline runs, pretext/skills/pretext."
+  },
+  "evals": [
+    {
+      "id": 1,
+      "name": "float-image-plain-js",
+      "baseline_must_fail": true,
+      "prompt": "I'm building a small magazine-style page in plain JavaScript, no framework and no TypeScript. The article is painted on a <canvas>, so CSS float isn't an option. I ran `npm i @chenglou/pretext` today.\n\nThe text has to flow around an image floated at the top left of the column: lines next to the image start after it and are shorter, and lines below it use the full column.\n\nWrite `float-text.js`, an ES module exporting `flowAroundImage(text, font, lineHeight, columnWidth, image)`. `image` is `{ width, height, gap }`. It returns an array of `{ text, x, y }`, one per line, with `y` the top of the line. Don't draw anything, I'll do the fillText calls myself.",
+      "expected_output": "float-text.js walks the text a line at a time with layoutNextLine(prepared, width, cursor), starting from an undefined cursor, and returns placed lines. It finishes on 1.0.0 and the lines beside the image are narrower.",
+      "files": [],
+      "assertions": [
+        "[tsc] float-text.js type-checks with zero diagnostics against the pinned 1.0.0 package (grading.typecheck)",
+        "[static] Every layoutNextLine or layoutNextLineRange call in float-text.js passes the width as the second argument and the cursor as the third",
+        "[static] The first line's cursor is omitted or undefined: not null, and not a hand-built { segmentIndex: 0, graphemeIndex: 0 }",
+        "[run] flowAroundImage finishes under the watchdog and the joined line text equals the input with white space normalized: `node run-export.mjs float-text.js e1-check.js` prints ok:true and sameText:true",
+        "[run] Lines beside the image start at x >= width + gap, lines below it start at x = 0, and no line runs past columnWidth: e1-check.js reports an empty `bad` list"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "chat-bubble-shrink-wrap",
+      "prompt": "Our chat UI uses pretext for bubble heights. Multi-line bubbles are as wide as the max width, so a message that wraps leaves a strip of dead space on the right. I want each bubble to hug its longest line.\n\nWrite `bubble-width.ts` exporting `bubbleWidth(text, font, maxWidth)`, which returns the bubble's content width in px. The package is @chenglou/pretext, latest version.",
+      "expected_output": "bubble-width.ts prepares with prepare(), reads the widest line from measureLineStats or walkLineRanges at maxWidth, and returns a width that never exceeds maxWidth and keeps the same line count.",
+      "files": [],
+      "assertions": [
+        "[tsc] bubble-width.ts type-checks with zero diagnostics against the pinned 1.0.0 package (grading.typecheck)",
+        "[static] The text is prepared with prepare(), not prepareWithSegments()",
+        "[static] The widest line comes from measureLineStats or walkLineRanges, not from layoutWithLines or measureNaturalWidth",
+        "[run] The result never exceeds maxWidth, including fractional widths and a long unbreakable URL, and keeps the line count layout() gives at maxWidth: e2-check.js reports an empty `fails` list",
+        "[run] A wrapped message comes back narrower than maxWidth: e2-check.js reports shrunk:true"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "migrate-old-usage",
+      "prompt": "We're moving @chenglou/pretext from 0.0.8 to 1.0.0 and the reader's layout module has to come along. It's the attached `fixtures/old-usage.ts`. Part of it is typed and part of it came over from a JS file.\n\nMigrate it to 1.0.0 and save the result as `old-usage.ts`, keeping every exported function's name and parameters so callers don't change. List what you changed in `migration-notes.md`. This is one file out of a bigger repo, so also tell me there how you made sure nothing old was left behind.",
+      "expected_output": "old-usage.ts compiles against 1.0.0 and behaves correctly: all four line-iterator calls have the width before the cursor (including the aliased nextRange call in untyped code), segLevels is gone, fragment offsets come from sourceStart and sourceEnd, both .map(prepareRichInline) sites use an arrow, and the other breaking rows are handled.",
+      "files": [
+        "fixtures/old-usage.ts"
+      ],
+      "record": [
+        "wrote_scanner: whether the run wrote a script that finds old usage (not just a grep it ran), what it matches, and whether it finds the nextRange alias, the multi-line .map and the destructured { start, end }. Step 5 compares this across the three E3 runs. Save any such script with the run's outputs."
+      ],
+      "assertions": [
+        "[tsc] old-usage.ts type-checks with zero diagnostics against the pinned 1.0.0 package (grading.typecheck)",
+        "[static] All four line-iterator calls have the width second and the cursor third: flowArticle's layoutNextLine, both layoutNextLine calls in paintColumn, and the nextRange call in countColumnLines",
+        "[run] paintColumn finishes under the watchdog and paints more than one line: `node run-export.mjs old-usage.ts e3-check.js paintColumn`, n > 1. The unmigrated fixture times out here",
+        "[run] countColumnLines finishes under the watchdog and returns a count above 1: `node run-export.mjs old-usage.ts e3-check.js countColumnLines`. The unmigrated fixture times out here",
+        "[static] No code reads segLevels, in the typed half or the untyped half, directly or through a cast. Comments don't count",
+        "[static] highlightSpans and copySpans take their offsets from sourceStart and sourceEnd. No `.start.graphemeIndex`, `.end.graphemeIndex` or destructured `{ start, end }` of a fragment remains",
+        "[run] highlightSpans and copySpans return real offsets: in e3-check.js the last span of item 2 has a `to` above 0. The unmigrated fixture returns 0 here, with no error",
+        "[static] Both preparations use an arrow function, in prepareThread and in the multi-line .map in prepareAllThreads: no bare prepareRichInline is passed to map",
+        "[run] hasNoBreakRun answers from the text's characters: `node run-export.mjs old-usage.ts e3-check.js hasNoBreakRun` returns noBreak true and plain false, so a literal `kind === 'text'` port, true for both, fails. Reading the code, singleLineWidth no longer calls .reduce on prepared.widths, and the 'glue' literal is gone from hasNoBreakRun",
+        "[run] prepareForElement doesn't throw on an element with `letter-spacing: normal`: e3-check.js returns true for it",
+        "[static] resetReaderLocale calls setLocale() with no argument, and applyReaderLocale no longer passes navigator.language, or migration-notes.md says why it was kept"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "inline-custom-emoji",
+      "prompt": "We have a Slack-style message list. Custom emoji are 20px images with a 2px margin on each side, and they sit in the middle of the text. I lay messages out myself with absolute positioning, using @chenglou/pretext (latest), and the emoji need to wrap with the text.\n\nWrite `message-lines.ts` exporting `layoutMessage(parts, maxWidth)`. `parts` is `Array<{ type: 'text', text: string } | { type: 'emoji', name: string, src: string }>`, and the body font is `15px Inter`. It returns an array of lines, each an array of `{ kind: 'text', text, x } | { kind: 'emoji', src, x }`.",
+      "expected_output": "message-lines.ts passes each emoji to prepareRichInline as a { width: 24 } box, its margin box, and reads the emoji's x from the fragments.",
+      "files": [],
+      "assertions": [
+        "[tsc] message-lines.ts type-checks with zero diagnostics against the pinned 1.0.0 package (grading.typecheck)",
+        "[static] Each emoji reaches prepareRichInline as a box, an item with `width` and no `text`, and the width is 24, the margin box",
+        "[static] No emoji is modelled with extraWidth or a stand-in character such as \\uFFFC or a space",
+        "[run] All three emoji come back in order with text around them and x never decreases within a line: e4-check.js reports the three src values, hasWords:true, monotonic:true and stray:false"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "font-rangeerror-diagnosis",
+      "prompt": "Getting this in the console since the upgrade:\n\n```\nUncaught RangeError: font must be a font string Canvas takes, a size in px then a family, such as 16px Inter, not \"\"\n    at prepare (layout.js)\n    at measureCard (cards.js:6:29)\n```\n\n```js\nfunction measureCard(title, width) {\n  const el = document.createElement('div')\n  el.className = 'card-title'\n  const font = getComputedStyle(el).font\n  const { height } = layout(prepare(title, font), width, 22)\n  return height\n}\n```\n\nCan you fix it? Put the fixed function in `measure-card.js` and tell me what was wrong in `answer.md`.",
+      "expected_output": "answer.md says getComputedStyle(el).font is an empty string because el was never added to the document. measure-card.js gets a real font string, without a try/catch hiding the error.",
+      "files": [],
+      "assertions": [
+        "[read] answer.md says the computed font is an empty string",
+        "[read] answer.md gives the cause: the element isn't in the document (unmounted), so it has no computed font shorthand",
+        "[static] measure-card.js passes prepare() a real font: read from an element in the document, or an explicit string such as '600 18px Inter'",
+        "[static] measure-card.js has no try/catch around prepare() that swallows the RangeError or falls back without reporting it"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "nextjs-client-measure",
+      "prompt": "Next.js 15, app router. I want a `MeasuredTitle` component that reserves the exact height of a wrapped title with @chenglou/pretext so the page doesn't jump. It gets used from server-rendered pages.\n\nWrite `MeasuredTitle.tsx` with a default export taking `{ text, font, width, lineHeight }`.",
+      "expected_output": "MeasuredTitle.tsx is a client component that prepares only in the browser, in an effect or behind ssr: false, and renders without measuring on the server.",
+      "files": [],
+      "assertions": [
+        "[run] The component renders on the server without throwing: `node e6-run.mjs MeasuredTitle.tsx` prints the markup. Node has no canvas, so a prepare() on the server path throws here. A component that imports next/dynamic can't be bundled by this check: grade it on the next assertion alone",
+        "[static] prepare() or prepareWithSegments() runs only in useEffect, useLayoutEffect, an event handler or a component loaded with ssr: false. It is not in the render body, useMemo, a useState initializer or at module scope",
+        "[static] The file starts with the 'use client' directive, or the measuring part lives in a client component it imports"
+      ]
+    },
+    {
+      "id": 7,
+      "name": "clamp-three-lines-more-link",
+      "prompt": "Feed cards show a post preview. I want at most 3 lines, and when the text is cut the last line ends in \u2026 followed by an inline \"more\" link about 44px wide, on the same line. We already use @chenglou/pretext (latest) for card heights.\n\nWrite `clamp.ts` exporting `clampPreview(text, font, width)`, which returns `{ lines: string[], truncated: boolean }`: the lines to show, the last one ending in \u2026 when cut. If you think this shouldn't be done in JS, give me the CSS in `clamp.css` instead. Either way, put a short note on your approach in `notes.md`.",
+      "expected_output": "Either clamp.ts walks the lines and cuts the last one to leave room for the ellipsis and the link, as upstream's ellipsis demo does, or clamp.css uses line clamping and notes.md justifies that choice given the inline link. No space sits before the ellipsis.",
+      "files": [],
+      "assertions": [
+        "[read] The approach is upstream's, laying out line by line and cutting the last line to leave room for the tail, or it is CSS line clamping with notes.md justifying how the inline link is handled",
+        "[run] If clamp.ts exists: at every width tried, 3 lines come back, truncated is true, and no white space sits before the \u2026: e7-check.js reports no `shape` or `space` entries in `bad`. If only clamp.css exists, this passes when no generated text puts a space before the ellipsis",
+        "[run] If clamp.ts exists: the last line has text before the … and, with the 44px link, fits in width: e7-check.js reports no `room` or `empty` entries in `bad`",
+        "[run] If clamp.ts exists: text that fits in 3 lines comes back whole with truncated false: e7-check.js `short`",
+        "[tsc] If clamp.ts exists, it type-checks with zero diagnostics against the pinned 1.0.0 package (grading.typecheck)"
+      ]
+    },
+    {
+      "id": 8,
+      "name": "autogrow-textarea",
+      "prompt": "Comment box: a <textarea> that grows as you type, and I don't want to read scrollHeight on every keystroke, so I'd like to compute the height with @chenglou/pretext (latest).\n\nWrite `autogrow.js`, an ES module exporting `textareaHeight(value, font, contentWidth, lineHeight)`, which returns the content height in px.",
+      "expected_output": "autogrow.js prepares with whiteSpace: 'pre-wrap' and adds one line when the value is empty or ends in a newline.",
+      "files": [],
+      "assertions": [
+        "[tsc] autogrow.js type-checks with zero diagnostics against the pinned 1.0.0 package (grading.typecheck)",
+        "[static] prepare() gets `{ whiteSpace: 'pre-wrap' }`",
+        "[run] The height matches a real textarea's scrollHeight for every row of e8-check.js, including '', 'a\\n', 'a\\n\\n' and '\\n': in each returned triple the second and third values are equal"
+      ]
+    },
+    {
+      "id": 9,
+      "name": "pinned-0.0.8-obstacle-flow",
+      "prompt": "Here's our package.json:\n\n```json\n{\n  \"name\": \"landing\",\n  \"type\": \"module\",\n  \"dependencies\": {\n    \"@chenglou/pretext\": \"^0.0.8\",\n    \"vite\": \"^7.0.0\"\n  }\n}\n```\n\nThe landing page hero is painted on a canvas. Add text flow around a circular avatar: export `flowAroundCircle(text, font, lineHeight, columnWidth, circle)` from `hero-flow.js`, where `circle` is `{ cx, cy, r }`, returning `{ text, x, y }` per line. Save your package.json as well, changed or not, and put anything I should know in `notes.md`.",
+      "expected_output": "The run notices the project is on 0.0.8, a range that never reaches 1.0, before writing code. It either upgrades to 1.0.0 and uses (prepared, width, cursor), or stays on 0.0.8 and uses (prepared, cursor, width), and says which.",
+      "files": [],
+      "assertions": [
+        "[read] notes.md names the installed line, 0.0.8, as a version that matters to the code, and the transcript shows the version was considered before hero-flow.js was written",
+        "[read] notes.md says explicitly which path was taken: upgraded to 1.0.0, or stayed on 0.0.8",
+        "[static] The signature matches the path taken: upgraded means (prepared, width, cursor) and the saved package.json requires ^1.0.0 or later; stayed means (prepared, cursor, width) with a cursor object on the first call and package.json unchanged",
+        "[tsc] hero-flow.js type-checks with zero diagnostics against the version chosen: `typecheck.sh hero-flow.js 1.0.0` or `typecheck.sh hero-flow.js 0.0.8`"
+      ]
+    },
+    {
+      "id": 10,
+      "name": "canvas-mixed-bidi",
+      "prompt": "We render social-card images on a canvas. Captions come from users and often mix English and Arabic in one sentence. I want to wrap them with @chenglou/pretext (latest) and draw each line with fillText.\n\nWrite `caption-canvas.ts` exporting `drawCaption(ctx, text, font, maxWidth, lineHeight)`, and put anything I should know in `notes.md`.",
+      "expected_output": "The code wraps with prepareWithSegments and layoutWithLines. notes.md warns that Pretext gives line breaks, not bidi order, so the order within a painted line isn't guaranteed, and recommends one DOM element with its direction set where that's possible.",
+      "files": [],
+      "assertions": [
+        "[tsc] caption-canvas.ts type-checks with zero diagnostics against the pinned 1.0.0 package (grading.typecheck)",
+        "[read] notes.md warns that Pretext gives no bidi levels or visual order, so mixed-direction text drawn line by line can come out in the wrong order",
+        "[read] notes.md recommends rendering a paragraph as one DOM element with its direction set, such as dir=\"auto\", wherever a DOM element is possible",
+        "[static] The code doesn't read segLevels or any other handle internal to get direction"
+      ]
+    },
+    {
+      "id": 11,
+      "name": "handle-persistence-and-store",
+      "prompt": "Our chat app has tens of thousands of messages and pretext's prepare() is the hottest thing in our load profile. The plan: keep the prepared handles in IndexedDB so they're warm across sessions and deploys, and also put the handles for visible messages in our Redux Toolkit store so components can grab them directly.\n\nImplement that in `prepared-cache.ts`, and put anything you'd change about the plan in `notes.md`.",
+      "expected_output": "Handles aren't trusted across versions: the cache stores text, font and options and prepares again after an upgrade. Handles in the store are treated as derived data. Nothing claims Immer's freeze breaks them.",
+      "files": [],
+      "assertions": [
+        "[read] IndexedDB: notes.md says a handle from another Pretext version can't be used, so after an upgrade the text must be prepared again",
+        "[static] prepared-cache.ts never reuses a persisted handle across versions: it stores text, font and options and calls prepare() again, or it keys entries by package version and discards the others",
+        "[read] Store: the store's source of truth is the text, font and options, and handles are treated as derived data, memoized or rebuilt from them",
+        "[read] Neither notes.md nor code comments claim that Immer's freeze or produce breaks a handle. A note that a handle isn't serializable, or trips Redux Toolkit's serializable check, is fine"
+      ]
+    },
+    {
+      "id": 12,
+      "name": "wrap-mismatch-diagnosis",
+      "baseline_must_fail": true,
+      "prompt": "We size cards with pretext's `layout()` before rendering, and the text itself is a normal <p> inside the card. Mostly it's right, but at some window widths a card's text wraps to one more line than `layout()` said and gets clipped. It's @chenglou/pretext, latest version.\n\nWhat's going on and what should we do? Write your answer to `answer.md`.",
+      "expected_output": "answer.md keeps the single <p> and has the user check overflow-wrap: break-word on it, that the font matches the string given to prepare(), and that the element's content width equals the width given to layout(). It doesn't say CSS must never wrap the text.",
+      "files": [],
+      "assertions": [
+        "[read] answer.md asks about or sets `overflow-wrap: break-word` on the painted element, as a likely cause rather than an aside",
+        "[read] answer.md has the user check that the painted font matches the font string given to prepare()",
+        "[read] answer.md has the user check that the element's content width equals the width given to layout(), padding and border excluded",
+        "[read] answer.md doesn't say to stop letting CSS wrap the text. A <p> the browser wraps stays the recommended way to paint it, and rendering each line as its own element isn't given as the fix",
+        "[read] answer.md keeps Pretext for sizing: measuring with the DOM instead, such as getBoundingClientRect or dropping layout(), isn't given as the fix"
+      ]
+    }
+  ]
+}

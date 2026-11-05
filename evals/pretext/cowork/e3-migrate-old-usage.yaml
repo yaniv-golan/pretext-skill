@@ -1,0 +1,40 @@
+name: e3-migrate-old-usage
+session: _session.yaml
+fidelity: hostloop
+prompt: 'We''re moving @chenglou/pretext from 0.0.8 to 1.0.0 and the reader''s layout module has to come
+  along. It''s the attached `old-usage.ts` in {{workspaceFolder}}. Part of it is typed and part of it
+  came over from a JS file.
+
+
+  Migrate it to 1.0.0 and save the result as `old-usage.ts`, keeping every exported function''s name and
+  parameters so callers don''t change. List what you changed in `migration-notes.md`. This is one file
+  out of a bigger repo, so also tell me there how you made sure nothing old was left behind.
+
+
+  Save every file you produce directly in {{workspaceFolder}}.'
+workspace_fixture: ../fixtures
+assert:
+- result: success
+- skill_triggered: pretext
+- user_visible_artifact:
+    path: outputs/old-usage.ts
+    authored: true
+- user_visible_artifact: outputs/migration-notes.md
+- semantic_matches:
+    rubric:
+    - 'In old-usage.ts all four line-iterator calls have the width second and the cursor third: flowArticle''s
+      layoutNextLine, both layoutNextLine calls in paintColumn, and the nextRange call in countColumnLines.'
+    - No code in old-usage.ts reads segLevels, in the typed half or the untyped half, directly or through
+      a cast. Comments don't count.
+    - highlightSpans and copySpans in old-usage.ts take their offsets from sourceStart and sourceEnd.
+      No .start.graphemeIndex, .end.graphemeIndex or destructured { start, end } of a fragment remains.
+    - 'Both preparations in old-usage.ts use an arrow function, in prepareThread and in the multi-line
+      .map in prepareAllThreads: no bare prepareRichInline is passed to map.'
+    - In old-usage.ts singleLineWidth no longer calls .reduce on prepared.widths, the 'glue' literal
+      is gone from hasNoBreakRun, and hasNoBreakRun tests the text's characters, so it returns false
+      for plain text. A literal kind === 'text' test fails this.
+    - In old-usage.ts resetReaderLocale calls setLocale() with no argument, and applyReaderLocale no longer
+      passes navigator.language, or migration-notes.md says why it was kept.
+    evidence_files:
+    - outputs/old-usage.ts
+    - outputs/migration-notes.md

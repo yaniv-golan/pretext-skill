@@ -45,6 +45,12 @@ const mixed = [{ text: 'a', font: '16px Inter', break: 'never' }, { width: 20 }]
 // @ts-expect-error break widens to string in an inferred array
 prepareRichInline(mixed)
 
+declare const parts: Array<{ text: string } | { width: number }>
+// @ts-expect-error with strict off, even inline, a text-or-box .map() needs a return annotation
+prepareRichInline(parts.map((p) => 'text' in p ? { text: p.text, font: f } : { width: p.width }))
+// @ts-expect-error with strict off, annotating the variable doesn't reach into the arrow
+const mappedVariable: Array<RichInlineItem | RichInlineBox> = parts.map((p) => 'text' in p ? { text: p.text, font: f } : { width: p.width })
+
 // --- must compile ---
 
 measureLineStats(prepare(t, f), 200)
@@ -53,6 +59,7 @@ prepareRichInline([{ width: 20 }])
 const rich = prepareRichInline(items, { whiteSpace: 'pre-wrap', wordBreak: 'keep-all' })
 const typed: Array<RichInlineItem | RichInlineBox> = [{ text: 'a', font: '16px Inter', break: 'never' }, { width: 20 }]
 prepareRichInline(typed)
+prepareRichInline(parts.map((p): RichInlineItem | RichInlineBox => 'text' in p ? { text: p.text, font: f, break: 'never' } : { width: p.width }))
 walkRichInlineLineRanges(rich, 200, (range) => materializeRichInlineLineRange(rich, range))
 
-export { itemWithWidth }
+export { itemWithWidth, mappedVariable }

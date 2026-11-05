@@ -1,0 +1,29 @@
+name: e12-wrap-mismatch-diagnosis
+session: _session.yaml
+fidelity: hostloop
+prompt: 'We size cards with pretext''s `layout()` before rendering, and the text itself is a normal <p>
+  inside the card. Mostly it''s right, but at some window widths a card''s text wraps to one more line
+  than `layout()` said and gets clipped. It''s @chenglou/pretext, latest version.
+
+
+  What''s going on and what should we do? Write your answer to `answer.md`.
+
+
+  Save every file you produce directly in {{workspaceFolder}}.'
+assert:
+- result: success
+- skill_triggered: pretext
+- user_visible_artifact: outputs/answer.md
+- semantic_matches:
+    rubric:
+    - 'answer.md asks about or sets overflow-wrap: break-word on the painted element, as a likely cause
+      rather than an aside.'
+    - answer.md has the user check that the painted font matches the font string given to prepare().
+    - answer.md has the user check that the element's content width equals the width given to layout(),
+      padding and border excluded.
+    - answer.md doesn't say to stop letting CSS wrap the text. A <p> the browser wraps stays the recommended
+      way to paint it, and rendering each line as its own element isn't given as the fix.
+    - 'answer.md keeps Pretext for sizing: measuring with the DOM instead, such as getBoundingClientRect
+      or dropping layout(), isn''t given as the fix.'
+    evidence_files:
+    - outputs/answer.md

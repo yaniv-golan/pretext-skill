@@ -1,0 +1,30 @@
+name: e1-float-image-plain-js
+session: _session.yaml
+fidelity: hostloop
+prompt: 'I''m building a small magazine-style page in plain JavaScript, no framework and no TypeScript.
+  The article is painted on a <canvas>, so CSS float isn''t an option. I ran `npm i @chenglou/pretext`
+  today.
+
+
+  The text has to flow around an image floated at the top left of the column: lines next to the image
+  start after it and are shorter, and lines below it use the full column.
+
+
+  Write `float-text.js`, an ES module exporting `flowAroundImage(text, font, lineHeight, columnWidth,
+  image)`. `image` is `{ width, height, gap }`. It returns an array of `{ text, x, y }`, one per line,
+  with `y` the top of the line. Don''t draw anything, I''ll do the fillText calls myself.
+
+
+  Save every file you produce directly in {{workspaceFolder}}.'
+assert:
+- result: success
+- skill_triggered: pretext
+- user_visible_artifact: outputs/float-text.js
+- semantic_matches:
+    rubric:
+    - Every layoutNextLine or layoutNextLineRange call in float-text.js passes the width as the second
+      argument and the cursor as the third.
+    - 'In float-text.js the first line''s cursor is omitted or undefined: not null, and not a hand-built
+      { segmentIndex: 0, graphemeIndex: 0 }.'
+    evidence_files:
+    - outputs/float-text.js
