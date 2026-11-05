@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Note: this file is the *technical* changelog for contributors — the GitHub Releases page may show user-facing release notes that summarize the same release differently.
 
+## [0.3.0] - 2026-11-06
+
+Rewrite to target `@chenglou/pretext` 1.0.0 (the skill's own version stays 0.x; 0.2.0 set the precedent for a multi-release upstream jump). The skill now covers `>=1.0.0` only; earlier versions go through `references/migration.md`.
+
+### Changed
+- Targets pretext 1.0.0, with upstream links pinned to the `v1.0.0` tag
+- Reversed guidance that no longer holds on 1.0.0; `SKILL.md` is rewritten around a "read when" table that routes to the references
+- References split by task: `api.md`, `rich-inline.md`, and `patterns.md` becomes `patterns-sizing.md`, `patterns-flow.md` and `patterns-integration.md`
+
+### Added
+- `references/migration.md` (0.0.x to 1.0.0, row by row from upstream's upgrade notes) and `references/accuracy.md` (caveats, bundle size, painting)
+- New recipes: ellipsis clamping, virtualized lists, live-edited text, and `paintableText` for soft-hyphen breaks
+- `tools/verify`: a repo-only verifier that type-checks and runs the skill's examples against pretext 1.0.0 in real browsers (not shipped in the zip)
+- `evals/pretext`: 12 prompts, 57 assertions, run checks, and cowork-harness scenarios. On iteration 1 the new skill passed 57/57 and the 0.0.8-era skill 30/57
+
+### Fixed
+- An SVG recipe that crashed
+- The public function count
+- The gap that was skipped when drawing rich inline text
+- `prepare` called on every frame in a recipe; it now runs once per text and font
+- False claims about empty blocks and about the streaming demo
+
+### Notes
+- Covers upstream 0.0.9 (bug fixes only) through 1.0.0
+- Watch item: upstream's unreleased zero-width-space fix; revisit when it ships
+- Verified on Chromium and WebKit. Firefox could not be launched here and is unverified; Firefox and Safari statements are attributed to upstream
+- Compile-only (type-checked, not run in a browser): list relayout, the Vue and Svelte integrations, and the Node shim
+- No scanner script is bundled; the shipped skill holds `SKILL.md`, `VERSION` and `references/*.md`
+
 ## [0.2.2] - 2026-07-14
 
 Version-coverage bump to track `@chenglou/pretext` v0.0.8 (published 2026-06-12), one upstream release beyond the v0.0.7 covered by 0.2.0/0.2.1. **No public API change upstream** — the documented 18-function surface, options, and gotchas remain accurate. Documentation only.
