@@ -37,7 +37,7 @@ function MeasuredText({ text, font, width, lineHeight }) {
 
   // undefined until measured, so the server render and the first client render agree, and
   // undefined again after text or font changes, until the new handle is ready
-  const fresh = measured?.text === text && measured.font === font
+  const fresh = measured?.text === text && measured?.font === font
   const height = fresh ? layout(measured.prepared, width, lineHeight).height : undefined
   return (
     <div style={{ font, lineHeight: `${lineHeight}px`, width, overflowWrap: 'break-word', height }}>
