@@ -31,7 +31,7 @@ Read the project's `package.json` (or run `npm ls @chenglou/pretext`) before wri
 - **Auto-fit font size** to N lines, which CSS can't do.
 - **Truncate to N lines with an ellipsis** when you need the clamped strings, as for Canvas or SVG.
 - **Flow text around obstacles**: a different width for each line.
-- **Lines and widths for painting with `fillText`** in canvas, SVG or WebGL. Paint through `paintableText` so soft-hyphen breaks draw the hyphen that was measured.
+- **Lines and widths for painting with `fillText`** in canvas, SVG or WebGL. Paint each line's text through `paintableText`, a helper recipe in patterns-flow.md (not a library export), so soft-hyphen breaks draw the hyphen that was measured.
 - **Rich inline text**: mentions, chips, code spans and inline images, via `/rich-inline`.
 - **Shrink-wrap**: the tightest width for a chat bubble or label.
 
@@ -39,7 +39,7 @@ Read the project's `package.json` (or run `npm ls @chenglou/pretext`) before wri
 
 - **CSS already handles it**: don't reimplement floats, flex or plain wrapping.
 - **Content is HTML, not text**: tables, code blocks and nested elements need DOM measurement.
-- **Virtualizers such as TanStack Virtual**: exact heights work when all content is Pretext-measured, with no `measureElement` loop. Mixed content (images of unknown size, embeds, HTML) needs DOM measuring.
+- **Virtualizers with mixed content** (images of unknown size, embeds, HTML): these need DOM measuring. When all content is Pretext-measured, Pretext heights work in a virtualizer such as TanStack Virtual with no `measureElement` loop.
 - **Accordion content with HTML structure**: measure it off-screen in the DOM.
 
 ## Quick Start
@@ -101,7 +101,7 @@ On macOS, Canvas resolves `system-ui` and `-apple-system` to a different font fr
 
 ### 6. No Canvas, No Pretext
 
-Without a Canvas 2D context or a global `OffscreenCanvas`, as in Node, Bun, jsdom, happy-dom and server rendering, `prepare()` throws `Text measurement requires OffscreenCanvas or a DOM canvas context.`, so call it only on the client, or see [patterns-integration.md](references/patterns-integration.md#outside-the-browser) for a shim. `Intl.Segmenter` is needed only for Southeast Asian scripts such as Thai.
+Without a Canvas 2D context or a global `OffscreenCanvas`, `prepare()` throws `Text measurement requires OffscreenCanvas or a DOM canvas context.` Node and server rendering throw; upstream says Bun, jsdom and happy-dom do too. Call it only on the client, or see [patterns-integration.md](references/patterns-integration.md#outside-the-browser) for a shim. `Intl.Segmenter` is needed only for Southeast Asian scripts such as Thai.
 
 ### 7. Border in Height Estimates
 
@@ -142,7 +142,7 @@ Gotchas #11 and #12 share a theme: **a mismatch comes from changing the inputs a
 
 ### 13. Handles Are Opaque and Version-Bound
 
-A handle belongs to the Pretext version that made it, and another version's handle throws a `TypeError`. Store the text, font and options, and prepare again rather than persisting handles across versions (IndexedDB, a worker on another bundle). Don't read internals the types don't expose. A handle holds a typed array: a shallow `Object.freeze` or Immer works, but a hand-written recursive freeze throws, so don't write one.
+A handle belongs to the Pretext version that made it, and another version's handle throws a `TypeError`. Store the text, font and options, and prepare again rather than persisting handles across versions (IndexedDB, a worker on another bundle). Don't read internals the types don't expose. A handle holds a typed array: a shallow `Object.freeze`, or Immer's `freeze` and `produce`, work, but a hand-written recursive freeze throws, so don't write one.
 
 ## Which API Do I Need?
 
@@ -156,7 +156,7 @@ A handle belongs to the Pretext version that made it, and another version's hand
 | Intrinsic width (widest forced line) | `prepare` | `measureNaturalWidth` |
 | Variable widths without strings | `prepare` | `layoutNextLineRange` |
 | Truncate with an ellipsis | `prepare` to test; `prepareWithSegments` for the strings | `layout`; the [clamp recipe](references/patterns-sizing.md#truncating-with-an-ellipsis) |
-| Per-line text (canvas, SVG, animation) | `prepareWithSegments` | `layoutWithLines` |
+| Per-line text (canvas, SVG, animation) | `prepareWithSegments` | `layoutWithLines`, painted via [`paintableText`](references/patterns-flow.md#painting-a-lines-text) |
 | Flow text around obstacles | `prepareWithSegments` | `layoutNextLine` in a loop ([recipes](references/patterns-flow.md#text-around-obstacles)) |
 | Variable widths, text only for painted lines | `prepareWithSegments` | `layoutNextLineRange` + `materializeLineRange` |
 | Mentions, chips, code spans inline | `prepareRichInline` (`/rich-inline`) | `walkRichInlineLineRanges` / `layoutNextRichInlineLineRange` |
