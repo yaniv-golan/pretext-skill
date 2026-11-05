@@ -11,7 +11,7 @@
     {
       "name": "pretext",
       "source": "./pretext",
-      "description": "Help developers use @chenglou/pretext for exact text metrics without DOM reflows",
+      "description": "Help developers use @chenglou/pretext for line breaks and heights without DOM reflows",
       "author": {
         "name": "Yaniv Golan",
         "email": "yaniv@golan.name"

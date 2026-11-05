@@ -1,18 +1,16 @@
 ---
 name: pretext
 description: >-
-  Help developers use @chenglou/pretext, a small TypeScript text measurement
-  library that computes exact text metrics without DOM reflows. Use when users
-  mention pretext, @chenglou/pretext, @chenglou/pretext/rich-inline, measuring
-  text height without triggering DOM reflow, measuring text height or line
-  count in JS, auto-fitting font size to a container, flowing text around
-  obstacles or images, laying out text per-line with variable widths, computing
-  the natural/widest line width of a paragraph, rich inline runs with chips or
-  mentions, layoutNextLine, or layoutNextLineRange. Covers API usage,
-  integration patterns, and gotchas (lineHeight must be CSS pixels, font
-  loading timing, system-ui caveats, ESM-only packaging). Do NOT use for
-  CSS-only text layout questions, generic typography advice, or unrelated
-  "shrink-to-fit" CSS questions.
+  Help developers use @chenglou/pretext 1.0+, a TypeScript library that measures
+  and lays out multiline text without DOM reflow. Use for pretext,
+  @chenglou/pretext, /rich-inline, layoutNextLine, layoutNextLineRange, upgrading
+  pretext from 0.0.x to 1.0, or text height, line count, shrink-wrap, auto-fit
+  font size, line clamp with ellipsis, text around obstacles, and inline chips,
+  mentions or images computed in JS. Also for its errors: "font must be a font
+  string Canvas takes", "Text measurement requires OffscreenCanvas", or a
+  layoutNextLine loop that never ends. Do NOT use for CSS-only layout, generic
+  typography, or CSS shrink-to-fit questions.
+compatibility: Written for @chenglou/pretext 1.0.0 or later. Pre-1.0 projects need references/migration.md first.
 license: MIT
 metadata:
   author: Yaniv Golan
@@ -21,24 +19,28 @@ metadata:
 
 # Pretext Integration Guide
 
-You are helping a developer use **@chenglou/pretext** — a small, tree-shakable TypeScript library by Cheng Lou that computes exact text metrics using pure math (no DOM reflows). It uses `CanvasRenderingContext2D.measureText` internally, segments text, measures once, caches, then does arithmetic for all subsequent layouts. The package ships proper ESM with subpath exports (`.` for core, `./rich-inline` for inline rich text) and is `sideEffects: false` — modern bundlers tree-shake unused entrypoints.
+You are helping a developer use **@chenglou/pretext**, a TypeScript library by Cheng Lou that predicts the browser's line breaks and heights from canvas measurements, using ports of each browser's line breaker. `prepare()` segments the text and measures it once with `CanvasRenderingContext2D.measureText`; `layout()` is then arithmetic at any width, with no DOM reads. It is ESM: `@chenglou/pretext` is the core, and `@chenglou/pretext/rich-inline` handles mixed-font inline text.
+
+## Check the Version First
+
+Read the project's `package.json` (or run `npm ls @chenglou/pretext`) before writing any code. This skill covers 1.0.0 and later. Below 1.0.0, read [migration.md](references/migration.md) before writing code: a caret range on a 0.0.x version never reaches 1.0 by itself, and several signatures changed. Don't write signatures from memory; take them from the references.
 
 ## When Pretext Is the Right Tool
 
-Use Pretext when the developer needs to:
-- **Know text dimensions before rendering** — virtual scrolling, masonry layouts, card height estimation
-- **Auto-fit text to a container** — find the largest font size that keeps text within N lines (CSS has no equivalent)
-- **Flow text around obstacles** — magazine-style layouts where text wraps around shapes, images, or interactive elements
-- **Measure text in canvas/SVG/WebGL** — Pretext's measurements are exact for `fillText`
-- **Render rich inline text** — mentions, chips, code spans with browser-like boundary whitespace collapse, via the `@chenglou/pretext/rich-inline` subpath
-- **Measure many text items fast** — each `layout()` call is ~0.0002ms after the first `prepare()` per font
+- **Know text height before rendering**: virtual lists, masonry, cards, accordions.
+- **Auto-fit font size** to N lines, which CSS can't do.
+- **Truncate to N lines with an ellipsis** when you need the clamped strings, as for Canvas or SVG.
+- **Flow text around obstacles**: a different width for each line.
+- **Lines and widths for painting with `fillText`** in canvas, SVG or WebGL. Paint through `paintableText` so soft-hyphen breaks draw the hyphen that was measured.
+- **Rich inline text**: mentions, chips, code spans and inline images, via `/rich-inline`.
+- **Shrink-wrap**: the tightest width for a chat bubble or label.
 
 ## When NOT to Use Pretext
 
-- **CSS float/flex already handles it** — don't reimplement text flow that CSS does natively
-- **Content is HTML, not plain text** — Pretext measures plain text strings. Tables, code blocks, nested elements need DOM measurement
-- **TanStack Virtual + Pretext height estimation** — this integration is fragile. Height errors compound over many items, and `measureElement` correction loops cause desyncing. For <500 items, just render all and use CSS transitions. For 1000+, use Pretext estimates as seeds but rely on DOM correction
-- **Accordion content height** — if content has HTML structure, use off-screen DOM measurement (`visibility: hidden; position: absolute`)
+- **CSS already handles it**: don't reimplement floats, flex or plain wrapping.
+- **Content is HTML, not text**: tables, code blocks and nested elements need DOM measurement.
+- **Virtualizers such as TanStack Virtual**: exact heights work when all content is Pretext-measured, with no `measureElement` loop. Mixed content (images of unknown size, embeds, HTML) needs DOM measuring.
+- **Accordion content with HTML structure**: measure it off-screen in the DOM.
 
 ## Quick Start
 
@@ -49,235 +51,172 @@ npm install @chenglou/pretext
 ```js
 import { prepare, layout } from '@chenglou/pretext';
 
-// 1. Prepare a text+font pair (measures & caches internally)
-const prepared = prepare('Hello world', '16px Inter');
+const prepared = prepare('Hello world', '16px Inter'); // text first, then a canvas font
+const result = layout(prepared, 400, 24); // maxWidth 400px, lineHeight 24px
+// → { lineCount: number, height: number }
 
-// 2. Layout at any width — returns height and line count
-const result = layout(prepared, 400, 24); // maxWidth=400, lineHeight=24px
-// → { lineCount: 1, height: 24 }
-
-// Reuse for different widths (instant — pure arithmetic)
-const narrow = layout(prepared, 120, 24); // → more lines, taller
+const narrow = layout(prepared, 120, 24); // on resize, lay out again; never prepare again
 ```
 
 ## Critical Gotchas
 
-These are the bugs that will waste your time if you don't know about them. Read this section before writing any Pretext code.
+Read these before writing any Pretext code.
 
 ### 1. lineHeight Must Be in Absolute Pixels
 
-`layout()` expects lineHeight in **CSS pixels**, not a multiplier. This is the #1 integration bug.
+`layout()` takes line height in CSS px, not a multiplier. Passing `1.5` gives a plausible `lineCount` and a tiny `height`, with no error.
 
 ```js
-// WRONG — will compute heights ~14x too small (silent error)
-layout(prepared, 500, 1.5);
-
-// CORRECT — convert multiplier to pixels
-const fontSize = 14;
-const lineHeightPx = fontSize * 1.5; // = 21
-layout(prepared, 500, lineHeightPx);
+const prepared = prepare(text, '14px Inter');
+const lineHeightPx = 14 * 1.5; // CSS: font-size 14px, line-height 1.5
+layout(prepared, 500, lineHeightPx); // not layout(prepared, 500, 1.5)
 ```
 
-The error is silent — Pretext happily computes with `lineHeight: 1.5` pixels, producing plausible-looking `lineCount` values but tiny `height` values.
+### 2. prepare() Takes Text First, and a Bad Font Throws
 
-### 2. prepare() Takes Text First, Font Second
+`prepare(text, font)`. Swapped arguments throw a `RangeError`, unless the swapped text happens to be a valid font string, and then the numbers are silently wrong.
 
-```js
-// WRONG — arguments swapped
-prepare('16px Georgia', 'Hello world');
-
-// CORRECT
-prepare('Hello world', '16px Georgia');
-```
+- `getComputedStyle(el).font` can be an empty string (an unmounted element, or a longhand such as `font-variant-numeric`), which throws.
+- Which other strings throw varies by browser, such as `'1.5em Arial'` or `'caption'`: see [accuracy.md](references/accuracy.md#fonts). The safe form is a px size and a named family, `'600 16px Inter'`.
+- `document.fonts.load()` rejects a malformed string with a `SyntaxError` first, so that is the error you see.
 
 ### 3. Each Text+Font Pair Needs Its Own prepare()
 
-You cannot cache a single `prepare()` token and reuse it for different text. The library caches segment metrics per font string internally, so repeated calls with the same font are fast.
+A handle is for one text, font and options. Prepare each string. Pretext caches segment widths per font, so many strings in one font are cheap.
 
-### 4. Fonts Must Be Loaded First
+### 4. Load Fonts Before prepare()
 
-Pretext measures using currently loaded fonts. If you measure before web fonts load, you get fallback font metrics. Either await `document.fonts.ready` or accept slight inaccuracy.
+Before a web font loads, Canvas measures the fallback font. Await `document.fonts.load(font, text)`, which also loads the `unicode-range` parts the text needs, and handle its rejection. If text was prepared before its font arrived, call `clearCache()` and prepare it again.
+
+```js
+async function prepareLoaded(text, font) {
+  await document.fonts.load(font, text); // rejects for a malformed font string
+  return prepare(text, font);
+}
+```
 
 ### 5. system-ui Is Unreliable
 
-On macOS, Canvas resolves `system-ui` to a different optical variant than DOM rendering. Use explicit font names for guaranteed accuracy.
+On macOS, Canvas resolves `system-ui` and `-apple-system` to a different font from the one the page paints. Use a named font: see [accuracy.md](references/accuracy.md#fonts).
 
-### 6. No Canvas + No Intl.Segmenter = No Pretext
+### 6. No Canvas, No Pretext
 
-Pretext requires both `CanvasRenderingContext2D.measureText` AND `Intl.Segmenter` at runtime. It works in all modern browsers (2021+) and `OffscreenCanvas` workers. Node 16+ has `Intl.Segmenter` but no native Canvas 2D — `node-canvas` works for measurement but accuracy is not guaranteed across fonts. Server-side rendering is on the upstream roadmap but not shipped yet.
+Without a Canvas 2D context or a global `OffscreenCanvas`, as in Node, Bun, jsdom, happy-dom and server rendering, `prepare()` throws `Text measurement requires OffscreenCanvas or a DOM canvas context.`, so call it only on the client, or see [patterns-integration.md](references/patterns-integration.md#outside-the-browser) for a shim. `Intl.Segmenter` is needed only for Southeast Asian scripts such as Thai.
 
 ### 7. Border in Height Estimates
 
-When computing DOM element heights, don't forget `border-width`. A 1px border adds 2px total (top + bottom). Easy to miss, causes cumulative drift in layouts.
+When you add fixed parts to a text height, include `border-width`: a 1px border adds 2px to the box. It is easy to miss and adds up across a list.
 
-### 8. Empty String Returns `{ lineCount: 0, height: 0 }`
+### 8. Empty Text Is Zero Lines, but a Textarea Isn't
 
-`layout()` with an empty string returns zero height. Browsers still size an empty block to one `line-height`, so if you want browser-parity behavior, clamp it:
+`layout()` of `''` gives 0 lines and a height of 0. That matches the browser, where an empty block is 0 tall, so don't clamp it. A `<textarea>` shows one more line than `layout()` counts when its value is empty or ends in `\n`, because it keeps a line for the caret. Add it when you size one.
 
-```js
-const { lineCount, height } = layout(prepared, width, lineHeightPx);
-const browserHeight = Math.max(1, lineCount) * lineHeightPx;
-```
+### 9. letterSpacing Is a Finite CSS Pixel Number
 
-This catches you on empty placeholders, optimistic UI before content loads, and textarea auto-grow.
+`{ letterSpacing }` is CSS px. Convert `em` or `%` first: `0.05em` on a 16px font is `0.8`. A non-finite value such as `NaN` throws a `RangeError`.
 
-### 9. letterSpacing Is a CSS Pixel Number, Not em/Percent
+### 10. layoutNextLine Takes the Width Before the Cursor
 
-When you pass `{ letterSpacing: n }` to `prepare()` / `prepareWithSegments()`, `n` is treated as a CSS pixel value. CSS itself allows `letter-spacing: 0.05em` or `letter-spacing: 5%`, but Pretext only takes numeric pixels. Convert before passing:
+Since 1.0.0 the order is `(prepared, maxWidth, start?)`, for `layoutNextLine` and `layoutNextLineRange`. Before 1.0 the cursor came second. A call in the old order still runs in JavaScript but never returns `null`, so the loop hangs. Omit the cursor or pass `undefined` for the first line, never `null`, which throws.
 
 ```js
-// CSS: letter-spacing: 0.05em on 16px font
-const letterSpacingPx = 16 * 0.05; // = 0.8
-prepare(text, '16px Inter', { letterSpacing: letterSpacingPx });
+const prepared = prepareWithSegments(longText, '16px Inter');
+let cursor; // undefined: start at the beginning
+for (let y = 0; ; y += 20) {
+  const line = layoutNextLine(prepared, getWidthAroundObstacle(y), cursor);
+  if (line === null) break;
+  renderLine(line.text, y);
+  cursor = line.end;
+}
 ```
-
-If you pass an em or percent value as a number, measurements drift silently.
-
-### 10. Rich-Inline Parameter Order Is Swapped vs Core
-
-`layoutNextRichInlineLineRange` has its `start` cursor and `maxWidth` in the **opposite order** from `layoutNextLine`. A developer who copies the core call into the rich-inline path will silently misalign arguments. See [Rich Inline API](references/api.md#rich-inline) for the side-by-side signatures.
 
 ### 11. Measure the EXACT String That Will Be Rendered
 
-Pretext doesn't know about CSS transforms or post-measurement string ops. If your render pipeline applies any of these BEFORE drawing, apply them BEFORE `prepare()`:
+Pretext measures the characters you give it. Apply `text-transform`, `.toUpperCase()`, `.normalize()`, smart quotes or number formatting before `prepare()`, then paint that same string. Capitals are wider, so a box sized for mixed case overflows. Example: [accuracy.md](references/accuracy.md#painting).
 
-- `text-transform: uppercase` / `lowercase` / `capitalize` (uppercase letters are noticeably wider — ~10–15% in most fonts)
-- `.toUpperCase()` / `.toLowerCase()` / `.normalize()` in JS
-- Smart-quote or ligature substitution
-- Number/symbol mapping (e.g. fraction characters)
+### 12. Paint With What You Measured
 
-```js
-// WRONG — measures mixed-case, will render uppercase, overflow
-const prepared = prepare(text, font);
-const r = layout(prepared, w, lh);
-ctx.fillText(text.toUpperCase(), 0, 0);  // ← rendered is wider than r predicts
+Paint each paragraph as one element with the same `font`, the same `line-height` in px, the `width` you passed to `layout()`, and `overflow-wrap: break-word`. The browser then wraps it to the same lines in nearly all cases; check the painted height in your browser once. Paint per line only where the browser can't wrap for you: Canvas, SVG `<text>`, varying widths, and rich inline text with mixed fonts or padded pieces. For CSS that Pretext doesn't model, such as `text-wrap: balance` or `hyphens: auto`, see [accuracy.md](references/accuracy.md#css-pretext-does-not-model).
 
-// CORRECT — measure what you'll render
-const renderText = text.toUpperCase();
-const prepared = prepare(renderText, font);
-const r = layout(prepared, w, lh);
-ctx.fillText(renderText, 0, 0);
-```
+Gotchas #11 and #12 share a theme: **a mismatch comes from changing the inputs after measuring.** Paint the string, font, width and CSS you measured.
 
-Common case: comic lettering (all dialogue uppercase), display headlines, button labels with caps transforms. Symptom: containers sized "tightly" overflow at corners.
+### 13. Handles Are Opaque and Version-Bound
 
-### 12. Don't Measure With Pretext and Wrap With CSS
-
-If pretext measures `text` at `maxWidth` and reports `lineCount: 3`, then you render the text in a `<div style="max-width: ...">` or SVG `<foreignObject>` and let CSS do the wrapping, the CSS may break to 3 lines OR to 4 — the rules differ on hyphenation, soft-hyphens, kerning thresholds, and fallback-font width.
-
-Either:
-
-1. **Render per pretext's break points.** Use `prepareWithSegments` + `layoutWithLines` (or `layoutNextLine`) to get the actual line strings, render each line as its own element (`<tspan>`, `<div>`, `<text>` per line). Pixel-perfect match. See [Rendering Per-Line in SVG](references/patterns.md#rendering-per-line-in-svg).
-2. **Don't use pretext for wrap.** Let CSS handle measurement AND rendering (use `getBoundingClientRect` after the DOM lays out).
-
-Mixing measurement modes is the silent-overflow bug. Symptom: a balloon/box sized correctly for 3 lines actually renders 4, last line sticks out the bottom.
-
-Gotchas #11 and #12 share a theme with the streaming-chat anti-pattern: **anything you do AFTER pretext returns its result invalidates the result.** Keep the measured input and the rendered output identical.
+A handle belongs to the Pretext version that made it, and another version's handle throws a `TypeError`. Store the text, font and options, and prepare again rather than persisting handles across versions (IndexedDB, a worker on another bundle). Don't read internals the types don't expose. A handle holds a typed array: a shallow `Object.freeze` or Immer works, but a hand-written recursive freeze throws, so don't write one.
 
 ## Which API Do I Need?
 
-Start here. Match the developer's goal to the right API path — this avoids the most common mistake (using `prepare` when `prepareWithSegments` is needed, or vice versa).
-
-**Decision tree:** Need per-line text content (the actual strings)? → Manual / rich layout rows. Need only geometry (height, widths, line counts)? → Core layout rows. Need mentions/chips/code spans inline? → Rich Inline row.
-
 | Developer wants to... | prepare variant | layout function |
 |---|---|---|
-| **Core layout** | | |
-| Get text height/line count at a given width | `prepare` | `layout` |
-| Auto-fit font size (binary search over sizes) | `prepare` (in a loop) | `layout` |
-| Auto-height a textarea | `prepare` with `{ whiteSpace: 'pre-wrap' }` | `layout` |
-| ─────────────── | | |
-| **Manual / rich layout** | | |
-| Get per-line text content (render, animate) | `prepareWithSegments` | `layoutWithLines` |
-| Find widest line (shrink-wrap containers) | `prepareWithSegments` | `measureLineStats` or `walkLineRanges` |
-| Get line count + widest in one call, no strings | `prepareWithSegments` | `measureLineStats` |
-| Flow text around obstacles (variable width/line) | `prepareWithSegments` | `layoutNextLine` in a loop |
-| Variable widths, no string allocation (virtualization) | `prepareWithSegments` | `layoutNextLineRange` + lazy `materializeLineRange` |
-| Get intrinsic/widest forced line (hard breaks only) | `prepareWithSegments` | `measureNaturalWidth` |
-| Render mentions, chips, code spans inline | `prepareRichInline` (from `/rich-inline`) | `walkRichInlineLineRanges` / `layoutNextRichInlineLineRange` |
+| Text height or line count at a width | `prepare` | `layout` |
+| Auto-fit font size | `prepare` per size tried | `layout` in a binary search |
+| Auto-height a textarea | `prepare` with `{ whiteSpace: 'pre-wrap' }` | `layout`, plus one line when empty or ending in `\n` (gotcha #8) |
+| Widest line (shrink-wrap) | `prepare` | `measureLineStats` or `walkLineRanges` |
+| Line count plus widest line | `prepare` | `measureLineStats` |
+| Intrinsic width (widest forced line) | `prepare` | `measureNaturalWidth` |
+| Variable widths without strings | `prepare` | `layoutNextLineRange` |
+| Truncate with an ellipsis | `prepare` to test; `prepareWithSegments` for the strings | `layout`; the [clamp recipe](references/patterns-sizing.md#truncating-with-an-ellipsis) |
+| Per-line text (canvas, SVG, animation) | `prepareWithSegments` | `layoutWithLines` |
+| Flow text around obstacles | `prepareWithSegments` | `layoutNextLine` in a loop ([recipes](references/patterns-flow.md#text-around-obstacles)) |
+| Variable widths, text only for painted lines | `prepareWithSegments` | `layoutNextLineRange` + `materializeLineRange` |
+| Mentions, chips, code spans inline | `prepareRichInline` (`/rich-inline`) | `walkRichInlineLineRanges` / `layoutNextRichInlineLineRange` |
+| Inline images or emoji | `prepareRichInline` with a `{ width }` box | the same ([boxes](references/rich-inline.md#boxes)) |
 
-**The key decision is `prepare` vs `prepareWithSegments` vs `prepareRichInline`:**
-- `prepare` → only gives you `layout()` (height + line count). Fastest path.
-- `prepareWithSegments` → gives you ALL core layout functions including `layout()`. Use this the moment you need per-line data, variable widths, or geometry without strings. There is no reason to call both for the same text.
-- `prepareRichInline` (from `@chenglou/pretext/rich-inline`) → its own prepare path for arrays of mixed-font items. Not interchangeable with the core handles.
+**Choosing the prepare call:**
 
-`prepare` and `prepareWithSegments` both accept `{ whiteSpace, wordBreak, letterSpacing }` as a third argument. `wordBreak: 'keep-all'` is the CSS-equivalent for CJK/Hangul. `letterSpacing` is a CSS pixel number (see gotcha #9). `prepareRichInline` is different — it takes only the items array; per-item `letterSpacing` and `break` live inside each item.
+- Use `prepare` unless a function must return text. Its handle works with `layout`, `layoutNextLineRange`, `walkLineRanges`, `measureLineStats` and `measureNaturalWidth`.
+- `prepareWithSegments` is for `layoutWithLines`, `layoutNextLine` and `materializeLineRange`, and for reading `segments`, `kinds` and `widths`. `widths` is typed `ArrayLike<number>`: copy it with `Array.from` before using array methods.
+- `prepareRichInline` is for mixed fonts, padded pieces, atomic items and boxes. It takes an items array, and `{ whiteSpace, wordBreak }` as its second argument; `letterSpacing`, `break` and `extraWidth` go on each item. Its handle doesn't work with the core functions.
 
-Common API selection mistakes:
-- Using `prepare` then calling `layoutWithLines` → crashes at runtime (no `.segments`)
-- Using `layoutWithLines` when only widths are needed → `walkLineRanges` or `measureLineStats` is cheaper (no string allocation)
-- Using `layoutWithLines` when width varies per line → must use `layoutNextLine` (or `layoutNextLineRange`) instead
-- Using `measureNaturalWidth` for shrink-wrap of soft-wrapping text → it returns the widest **forced** line (hard breaks only); use `measureLineStats` / `walkLineRanges` for soft-wrap shrink-wrap
-- Re-calling `prepare` on container resize → just call `layout` again with the new width (it's pure arithmetic)
+`prepare` and `prepareWithSegments` take `{ whiteSpace, wordBreak, letterSpacing }` third. `wordBreak: 'keep-all'` is CSS `word-break: keep-all`, for CJK and Hangul.
 
-For full signatures, types, and examples, see the [API Reference](references/api.md). For rich inline specifically, jump to [Rich Inline](references/api.md#rich-inline).
+Common mistakes:
+- `prepare` then `layoutWithLines` (or `layoutNextLine`, `materializeLineRange`) throws a `TypeError`.
+- `.map(prepareRichInline)` passes the index as options. Write `.map(items => prepareRichInline(items))`.
+- `layoutWithLines` when the width varies per line: use `layoutNextLine` or `layoutNextLineRange`.
+- `measureNaturalWidth` to shrink-wrap soft-wrapped text: it gives the widest forced line. Use `measureLineStats`.
+- Calling `prepare` again on resize: call `layout` again instead.
 
-## Integration Patterns
+## Where to Read More
 
-For detailed code examples of each pattern, see the [Patterns Reference](references/patterns.md). Here's when to reach for each:
+| File | What's in it | Read when |
+|---|---|---|
+| [api.md](references/api.md) | The 12 core functions, types and handle fields | Exact signatures or types for the main entry |
+| [rich-inline.md](references/rich-inline.md) | The 5 `/rich-inline` functions, items and boxes, painting fragments, recipes | Mixed fonts, chips, mentions, code spans, inline images |
+| [patterns-sizing.md](references/patterns-sizing.md) | Wrapper, auto-fit, cards, shrink-wrap, iterative search, truncation, live-edited text, virtualized lists, streaming | Heights, widths, line counts, fitting or clamping |
+| [patterns-flow.md](references/patterns-flow.md) | `paintableText`, obstacles, SVG per line, balanced layout, editorial, ASCII, 3D, animation | Placing lines yourself: variable widths, canvas, SVG |
+| [patterns-integration.md](references/patterns-integration.md) | Frameworks and SSR, progressive enhancement, vendoring, outside the browser | Wiring into an app, a build, a server or a worker |
+| [accuracy.md](references/accuracy.md) | Painting, fonts, language, widths, CSS it doesn't model, runtimes, engines, bundle size | Results differ from what the page shows |
+| [migration.md](references/migration.md) | 0.0.x to 1.0.0: finding old usage, breaking and silent changes | The project is below 1.0.0, or old code is pasted |
+| Upstream [markdown-chat.md](https://github.com/chenglou/pretext/blob/v1.0.0/pages/demos/markdown-chat.md) | The Markdown chat demo's patterns, and when to skip each | Chats and other long lists |
+| Upstream [README Caveats](https://github.com/chenglou/pretext/blob/v1.0.0/README.md#caveats) | Upstream's own accuracy notes | Anything `accuracy.md` doesn't cover |
 
-### Wrapper Module (Recommended First Step)
-Create a thin wrapper that converts lineHeight from CSS multiplier to pixels and returns `null` on failure. This prevents the critical lineHeight bug and enables progressive enhancement. An [extended variant](references/patterns.md#wrapper-module) supports `wordBreak`/`letterSpacing` for CJK or spaced-out type.
+## Demos
 
-### Auto-Fit Font Size
-Binary search for the largest font that keeps text within N lines. **This is Pretext's killer feature** — CSS has no equivalent. Use for hero headlines, card titles, quote displays. Shares its prepare-once-layout-many shape with all [iterative width searches](references/patterns.md#iterative-width-search) — re-preparing inside the loop is the most common performance bug.
+Live at https://chenglou.me/pretext/. In the repository: clone, `bun install`, `bun start`.
 
-### Height Estimation for Card Layouts
-Measure variable text parts with Pretext, add fixed parts (padding, border, gaps) manually. Good for simple cards. When you only need lineCount or widest-line numbers (not actual height in px), `measureLineStats` is cheaper than `layoutWithLines`. Remember: this is inherently approximate — don't use for pixel-perfect virtualization.
+- `accordion`: expand and collapse with predicted heights
+- `bubbles`: chat bubbles shrink-wrapped to their widest line
+- `dynamic-layout`: text routed around moving obstacles
+- `editorial-engine`: a magazine spread with columns and obstacles
+- `ellipsis`: line clamp with an ellipsis, and a path cut in its middle
+- `justification-comparison`: Knuth-Plass, greedy and CSS justification
+- `markdown-chat`: virtualized Markdown chat; the virtualization reference
+- `masonry`: masonry from predicted heights
+- `rich-note`: notes with mentions and chips
+- `variable-typographic-ascii`: ASCII art from glyph widths
 
-### Text Around Obstacles (layoutNextLine / layoutNextLineRange)
-The creative powerhouse. Feed a different `maxWidth` per line based on obstacle position. This enables magazine layouts, text flowing around images, and all the impressive community demos. For virtualization or hit-testing where you don't need the rendered text yet, `layoutNextLineRange` + lazy `materializeLineRange` avoids the per-line string allocation.
+## Performance
 
-### Rich Inline Text (Mentions, Chips, Code Spans)
-Use the `@chenglou/pretext/rich-inline` subpath when items have mixed fonts AND some items must stay atomic (chip pills with rounded chrome that can't break mid-name). Pretext handles browser-like boundary whitespace collapse so your `@maya` mention sits flush against surrounding text the way CSS inline rendering would. See the [Rich Inline pattern](references/patterns.md#rich-inline-text).
+- `prepare()` walks the whole text and measures new segments. `layout()` and the other line functions are arithmetic over the handle, safe for resize handlers and animation frames.
+- **Don't re-prepare.** Keep handles, and prepare again only when the text, font, options or language change.
+- **Hoist `prepare()` out of searches** over width or line count, such as balanced shrink-wrap: every iteration lays out the same handle. An auto-fit search prepares once per font size it tries, never per width.
+- **Streaming text:** prepare only the block that changed, not the whole message per token.
+- When you need no strings, `measureLineStats` or `walkLineRanges` on a `prepare` handle is cheaper than `layoutWithLines`.
 
-### Shrink-Wrap Without String Allocation
-For chat bubbles, balloon containers, or any "tightest box around this text" UI, use `measureLineStats` (single call returning `{ lineCount, maxLineWidth }`) instead of running `layoutWithLines` and inspecting strings. Pretext skips the string-construction step entirely.
+## Resources
 
-### Rendering Per-Line in SVG
-When the surface is SVG (speech balloons, badges, posters) and you want pixel-perfect alignment between what was measured and what's drawn, render each line as its own `<tspan>` with explicit `x` reset and a `dy` shift — don't rely on `<foreignObject>` + CSS wrap (see gotcha #12). See the [SVG per-line pattern](references/patterns.md#rendering-per-line-in-svg).
-
-### Balanced / Justified Layout (Knuth-Plass)
-The upstream package ships a `justification-comparison` demo showing Knuth-Plass-style paragraph layout next to greedy hyphenation and native CSS justification. Use the same line-walking primitives (`walkLineRanges` / `layoutNextLineRange`) plus a width-balancing pass for paragraphs that need even raggedness or proper justification. See the [Balanced layout pattern](references/patterns.md#balanced-layout).
-
-### Progressive Enhancement
-Always load Pretext as enhancement — the page should work without it. Use `type="module"` as a natural feature gate.
-
-### Vendoring (No Build Step)
-Modern bundlers handle Pretext natively — proper ESM exports, `sideEffects: false`, subpath exports. Reach for the [vendoring recipe](references/patterns.md#vendoring-without-a-bundler) only when you can't run a bundler at all.
-
-## Creative Demos & Advanced Patterns
-
-The npm package now ships its own demos under `pages/demos/` — clone the repo and run `bun start` to play with them locally. They are the canonical reference for the patterns below, and they're versioned with the package so they always reflect the current API:
-
-- **`accordion`** — Pretext-predicted heights for smooth expand/collapse with no layout thrashing
-- **`bubbles`** — multiline chat bubbles that shrink-wrap to their longest line
-- **`masonry`** — virtualized masonry using exact pre-measured heights
-- **`dynamic-layout`** — variable-width manual layout (live obstacle routing)
-- **`editorial-engine`** — accessible magazine-style multi-column spread with obstacle-aware title routing
-- **`justification-comparison`** — Knuth-Plass paragraph layout side-by-side with greedy hyphenation and native CSS justification
-- **`markdown-chat`** — virtualized chat with rich-inline + Markdown parsing (canonical streaming-chat reference)
-- **`rich-note`** — rich inline notes with mentions and chips
-- **`variable-typographic-ascii`** — particle-driven ASCII art using proportional glyph measurements
-
-The community showcase has 70+ more creative uses (fluid simulations, 3D text, games, dragon-shaped reflows). All use the same core API — the difference is how creatively you compute widths and route lines.
-
-See the [Patterns Reference](references/patterns.md) for code-level walkthroughs of the recurring idioms.
-
-## Performance Notes
-
-The two functions have very different cost profiles. Confusing them is the root cause of the streaming-chat anti-pattern.
-
-- **`prepare()` is O(N) in the input text length.** Each call re-runs the Unicode segmenter and walks every segment. First call per font also measures character widths (~1–5ms). Subsequent calls with the **same font** reuse the per-font segment-width cache, but the segmentation work still scales with the text. **Don't re-prepare the same growing text every frame.**
-- **Factor `prepare()` OUT of any iterative-width search.** Patterns like balanced shrink-wrap, auto-fit, and balanced-paragraph layout binary-search the maxWidth (or font size, or target line count). Each iteration must call `layout()` / `measureLineStats` / `walkLineRanges` on an already-prepared handle — NOT call `prepare()` again. Re-preparing inside the loop multiplies cost by the iteration count and produces visible UI hangs on long text. See [Iterative Width Search](references/patterns.md#iterative-width-search) for the correct shape.
-- **`layout()` is ~0.0002ms.** Pure arithmetic over a prepared handle. This is what's safe to call in `requestAnimationFrame`, scroll handlers, and workers — call it on every resize tick, not `prepare()`.
-- Typical batch cost: 500 different texts in the same font ≈ 19ms total prepare, 0.09ms per layout.
-- For streaming AI chat (text that grows token-by-token), see the tiered guidance at [Streaming AI Chat](references/patterns.md#streaming-ai-chat) — re-preparing every token is O(N²) across the stream and burns CPU on long messages.
-
-## Key Resources
-
-- GitHub: https://github.com/chenglou/pretext
-- Official demos: https://chenglou.me/pretext/ — also ship inside the npm package under `pages/demos/` (clone + `bun start`)
-- Community showcase (70+ projects): https://pretextwall.xyz/
-- Curated collection: https://www.pretext.cool/
-- Additional community demos: https://somnai-dreams.github.io/pretext-demos/
+- Repository: https://github.com/chenglou/pretext
+- README for 1.0.0: https://github.com/chenglou/pretext/blob/v1.0.0/README.md
+- CHANGELOG: https://github.com/chenglou/pretext/blob/v1.0.0/CHANGELOG.md
+- Live demos: https://chenglou.me/pretext/

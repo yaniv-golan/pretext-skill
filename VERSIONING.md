@@ -26,23 +26,35 @@ The version appears in these files (all managed by the bump script):
 ./tools/bump-version.sh
 ```
 
+## Tracking upstream
+
+The skill documents one pinned version of `@chenglou/pretext`, installed in `tools/verify`. To move to a new upstream release:
+
+1. Bump the pin: `( cd tools/verify && npm install --save-exact @chenglou/pretext@<version> )`.
+2. Run the verifier: `npm --prefix tools/verify run verify`. Every `FAIL` line names the file, line and claim that no longer holds.
+3. Read upstream's `CHANGELOG.md` for the new version (in `tools/verify/node_modules/@chenglou/pretext/`), including changes the verifier can't see, such as new caveats.
+4. Update the claims: the references, `SKILL.md`, the version in its `compatibility` field, and the pinned `blob/v<version>/` upstream links. Re-run the verifier until it exits 0.
+
 ## Release Process
 
 ```bash
-# 1. Bump version
+# 1. Verify the skill against the pinned upstream version (must exit 0)
+npm --prefix tools/verify run verify
+
+# 2. Bump version
 ./tools/bump-version.sh X.Y.Z
 
-# 2. Update CHANGELOG.md with a new "## [X.Y.Z] - YYYY-MM-DD" entry
+# 3. Update CHANGELOG.md with a new "## [X.Y.Z] - YYYY-MM-DD" entry
 #    (the release workflow extracts notes from here via awk)
 
-# 3. Commit
+# 4. Commit
 git add VERSION CHANGELOG.md pretext/skills/pretext/VERSION \
         pretext/skills/pretext/SKILL.md \
         pretext/.claude-plugin/plugin.json \
         .cursor-plugin/plugin.json
 git commit -m "Release vX.Y.Z: <one-line summary>"
 
-# 4. Tag and push (tag separately — avoids pushing all local tags)
+# 5. Tag and push (tag separately — avoids pushing all local tags)
 git tag -a vX.Y.Z -m "vX.Y.Z: <one-line summary>"
 git push origin main
 git push origin vX.Y.Z

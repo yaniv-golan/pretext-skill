@@ -10,9 +10,14 @@ pretext/                              <- plugin subdirectory
 └── skills/pretext/
     ├── SKILL.md                      <- canonical skill definition
     ├── VERSION                       <- runtime version
-    └── references/                   <- detailed API & pattern docs
-        ├── api.md
-        └── patterns.md
+    └── references/                   <- loaded on demand, routed from SKILL.md
+        ├── api.md                    <- the 12 core functions and types
+        ├── rich-inline.md            <- the 5 rich-inline functions
+        ├── patterns-sizing.md        <- heights, widths, fitting, clamping
+        ├── patterns-flow.md          <- placing lines yourself
+        ├── patterns-integration.md   <- frameworks, builds, servers, workers
+        ├── accuracy.md               <- matching what the browser paints
+        └── migration.md              <- upgrading from 0.0.x to 1.0.0
 ```
 
 ## How Each Platform Consumes the Skill
