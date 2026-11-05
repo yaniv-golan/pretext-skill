@@ -12,3 +12,17 @@ export const STREAM_REPLY =
   'Finally, sum the heights.'
 export const FONT = '16px Inter'   // @fontsource/inter latin + latin-ext, loaded via FontFace before any check
 export const LINE_HEIGHT = 20
+// Clamp corpus: the parity texts plus long unbroken words, CJK, Thai, emoji, one-letter words,
+// short words and Arabic.
+export const CLAMP_TEXTS = [
+  ...PARITY_TEXTS,
+  'Supercalifragilisticexpialidociousandmorewithoutanyspacesatall',
+  '日本語の文章はスペースなしで続きます。改行の位置を確かめる。',
+  'ภาษาไทยไม่มีช่องว่างระหว่างคำ',
+  '🚀🎉✨ emoji 🌍 run 🎈🎁',
+  'a b c d e f g h i j k l m n o p q r s t u v w x y z',
+  'Go to it, do it, and so on.',
+  'مرحبا بالعالم',
+]
+// Real hyphens ('well-known', 're-entry') beside soft-hyphen break points.
+export const PAINTABLE_TEXT = 'well-known contre-pro\u00ADposition co\u00ADoperate re-entry'

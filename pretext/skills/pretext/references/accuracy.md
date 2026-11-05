@@ -148,7 +148,7 @@ el.style.width = `${colWidth}px`
 const { height } = layout(prepare(text, '16px Inter'), colWidth, 20)
 ```
 
-- **Firefox rounds fractional font sizes**, per upstream, so a size such as `13.33px` can wrap differently there. Prefer whole-pixel sizes.
+- **Fractional font sizes** can wrap differently in Firefox: see the sizes bullet under [Fonts](#fonts).
 
 ## CSS Pretext does not model
 
@@ -157,7 +157,7 @@ Pretext targets `white-space: normal` and `pre-wrap`, `word-break: normal` and `
 **Wrapping:**
 
 - `text-wrap: balance` and `text-wrap: pretty`.
-- `hyphens: auto`. Pretext doesn't hyphenate. Insert soft hyphens (`'­'`) yourself before preparing, and paint the same string. A line broken at a soft hyphen ends with a hyphen, which its `width` counts.
+- `hyphens: auto`. Pretext doesn't hyphenate. Insert soft hyphens (`'\u00AD'`) yourself before preparing, and paint the same string. A line broken at a soft hyphen ends with a hyphen, which its `width` counts.
 - `hanging-punctuation`.
 - `line-break` other than `auto`.
 
@@ -187,8 +187,8 @@ Pretext targets `white-space: normal` and `pre-wrap`, `word-break: normal` and `
 | A Canvas 2D context, or a global `OffscreenCanvas` | Every `prepare()` throws `Error: Text measurement requires OffscreenCanvas or a DOM canvas context.` This is the case in Node, and upstream says in Bun, jsdom and happy-dom too |
 | `Intl.Segmenter` | Preparing text in Thai, Lao, Khmer, Myanmar or another Southeast Asian script written without spaces throws. Other text works |
 
-- **Server rendering.** `prepare()` throws during a server render, even inside a `'use client'` component. Call it only on the client, such as in an effect.
-- **A measuring shim.** Outside a browser you can define, before the first `prepare()`, a global `OffscreenCanvas` class that measures text your own way. Lines then break by Chrome's rules over your widths, which is exact only where you paint those lines yourself.
+- **Server rendering.** A server render runs in Node, so `prepare()` throws there, as the table says. Call it only on the client, such as in an effect: see [patterns-integration.md](patterns-integration.md#framework-integration-idiom).
+- **A measuring shim.** Outside a browser you can define a global `OffscreenCanvas` that measures text your own way: see [patterns-integration.md](patterns-integration.md#outside-the-browser) for the code, when its results are exact and what it stops checking.
 - **React Native.** Upstream says a runtime whose `navigator` has no `userAgent` follows Chrome's rules, and still needs a measuring `OffscreenCanvas`.
 
 **Workers.** `OffscreenCanvas` measures in a worker, but a worker has no `<html lang>`. Send the page's `document.documentElement.lang` and pass it to `setLocale()` once, before the worker's first `prepare()`:

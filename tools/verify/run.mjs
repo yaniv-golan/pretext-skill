@@ -188,7 +188,7 @@ const claimsSrc = fs.readFileSync(path.join(HERE, 'claims.mjs'), 'utf8').split('
 const claimLoc = (id) => `claims.mjs:${claimsSrc.findIndex((l) => l.includes(`id: '${id}'`)) + 1}`
 const runBlocks = blocks.filter((b) => b.tags.run && !b.tags.illustrative && CODE_LANGS.has(b.lang))
 const bundles = new Map() // name -> js
-const blockUnits = [] // { block, bundle, ids }
+const blockUnits = [] // { block, bundle, ids, exposed }
 
 // gate 2 static rules (engine-independent) and bundles
 await guard(2, async () => {
@@ -217,11 +217,18 @@ await guard(2, async () => {
     const code = mod.code + exposed.map((id) => `\nglobalThis.__recipes.${id} = ${id};`).join('')
     try {
       bundles.set(`block${i}`, await bundle(code, ext, `${b.file.replace(/\//g, '_')}-L${b.line}.${ext}`))
-      blockUnits.push({ block: b, bundle: `block${i}`, ids: exposed.filter((id) => CHECKS[id]) })
+      blockUnits.push({ block: b, bundle: `block${i}`, ids: exposed.filter((id) => CHECKS[id]), exposed })
     } catch (e) {
       fail(2, loc, 'bundle', e.errors?.[0]?.text || e.message)
     }
   }
+})
+
+// A claim with `recipe: '<id>'` runs on the documented recipe: its page first loads the bundle of the
+// `run` block whose id= declares that function, which sets globalThis.__recipes.<id>.
+const recipeBundle = (c) => blockUnits.find((u) => u.exposed.includes(c.recipe))?.bundle
+await guard(4, () => {
+  for (const c of CLAIMS) if (c.recipe && !recipeBundle(c)) fail(4, '<none>:0', c.id, 'no block')
 })
 
 // Node claims, each in its own process
@@ -333,9 +340,10 @@ for (const engine of BROWSERS) {
     // gate 4: browser claims
     await guard(4, async () => {
       for (const c of CLAIMS) {
-        if (!c.engines.includes(engine)) continue
+        if (!c.engines.includes(engine) || (c.recipe && !recipeBundle(c))) continue
         const page = await openPage(context)
         try {
+          if (c.recipe) await withTimeout(page.evaluate((n) => import(`/b/${n}.js`).then(() => {}), recipeBundle(c)), 5000)
           const msg = await withTimeout(page.evaluate(({ id, engine }) =>
             Promise.resolve().then(() => globalThis.__claims[id].run({ engine })).then(() => null, (e) => String(e?.message || e)), { id: c.id, engine }),
           120000, () => page.close().catch(() => {}))

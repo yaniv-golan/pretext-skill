@@ -17,4 +17,16 @@ globalThis.__fontsReady = (async () => {
     await face.load()
   }
   await document.fonts.load('16px Inter', 'abc')
+  // Test fonts for fontDrawsU2010, from the same latin file. InterNo has no U+2010 (its range stops at
+  // U+00FF). InterWide draws U+2010 from a face scaled to 150%, so it is wider than '-'.
+  const latin = '/fonts/inter-latin-400-normal.woff2'
+  for (const [family, unicodeRange, sizeAdjust] of [
+    ['InterNo', 'U+0000-00FF', '100%'],
+    ['InterWide', 'U+0000-200F,U+2011-FFFF', '100%'],
+    ['InterWide', 'U+2010', '150%'],
+  ]) {
+    const face = new FontFace(family, `url(${latin})`, { unicodeRange, sizeAdjust, weight: '400', style: 'normal' })
+    document.fonts.add(face)
+    await face.load()
+  }
 })()

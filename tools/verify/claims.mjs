@@ -1,4 +1,5 @@
-// Behavioural claims the skill relies on (gate 4). Shape: { id, source, engines, run(env) }.
+// Behavioural claims the skill relies on (gate 4). Shape: { id, source, engines, recipe?, run(env) }.
+// `recipe` names a function a skill `run` block declares; run.mjs loads that block first (browser only).
 // `run` throws to fail. `engines` lists where it runs: 'node' runs in its own Node process;
 // browser engines run in the verification page (fonts loaded, see fixtures.js) when named in BROWSERS.
 // `source` records where the expectation comes from.
@@ -265,6 +266,30 @@ export const CLAIMS = [
       assert(measureNaturalWidth(prepareWithSegments(' ', FONT)) === 0, 'a lone space has non-zero width')
       assert(measureNaturalWidth(prepareWithSegments(' ', FONT, { whiteSpace: 'pre-wrap' })) > 0, 'pre-wrap space measures 0')
       assert(measureNaturalWidth(prepareWithSegments('\u00A0', FONT)) > 0, 'U+00A0 measures 0')
+    },
+  },
+  {
+    id: 'bubble-width-dom', source: PROBE + ': 0/60 mismatches; Math.floor and ceil - 1 give 6/60 each', engines: BROWSERS, recipe: 'bubbleWidth',
+    run() {
+      const bubbleWidth = globalThis.__recipes.bubbleWidth
+      const PAD = 12
+      const base = `box-sizing:border-box;padding:0 ${PAD}px;font:${FONT};line-height:${LH}px;overflow-wrap:break-word;margin:0;border:0`
+      const bad = []
+      for (const text of PARITY_TEXTS) for (let w = 120; w <= 400; w += 20) {
+        const width = bubbleWidth(text, FONT, w, PAD)
+        const el = document.createElement('div')
+        el.textContent = text
+        el.style.cssText = `width:${width}px;${base}`
+        document.body.append(el)
+        const height = el.getBoundingClientRect().height
+        el.style.cssText = `display:inline-block;max-width:${w + 2 * PAD}px;${base}`
+        const cssWidth = el.getBoundingClientRect().width
+        el.remove()
+        const want = layout(prepare(text, FONT), w, LH).height
+        if (height !== want) bad.push(`w=${w} ${JSON.stringify(text.slice(0, 16))}: ${height}px tall, layout() says ${want}`)
+        if (width > cssWidth) bad.push(`w=${w} ${JSON.stringify(text.slice(0, 16))}: ${width}px wider than CSS's ${cssWidth}px`)
+      }
+      assert(bad.length === 0, `${bad.length} mismatches: ${bad.slice(0, 3).join('; ')}`)
     },
   },
   {
