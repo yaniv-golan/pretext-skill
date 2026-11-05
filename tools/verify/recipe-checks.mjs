@@ -27,16 +27,15 @@ export default {
   // gapBefore, y = lineIndex * lineHeight; returns the line count.
   paintRichLines: {
     check(fn) {
-      const LH = 20
       let cases = 0, gaps = 0
-      for (const whiteSpace of ['normal', 'pre-wrap']) {
+      for (const LH of [20, 17]) for (const whiteSpace of ['normal', 'pre-wrap']) {
         const prepared = prepareRichInline(RICH_ITEMS, { whiteSpace })
         for (let maxWidth = 40; maxWidth <= 420; maxWidth += 19) {
           const want = []
           walkRichInlineLineRanges(prepared, maxWidth, (r) => want.push(materializeRichInlineLineRange(prepared, r)))
           const calls = []
           const count = fn(prepared, maxWidth, LH, (fragment, x, y) => calls.push({ fragment, x, y }))
-          const at = `${whiteSpace} w=${maxWidth}`
+          const at = `${whiteSpace} w=${maxWidth} lh=${LH}`
           assert(count === measureRichInlineStats(prepared, maxWidth).lineCount, `${at}: returned ${count}, expected ${measureRichInlineStats(prepared, maxWidth).lineCount}`)
           const total = want.reduce((n, l) => n + l.fragments.length, 0)
           assert(calls.length === total, `${at}: draw called ${calls.length} times for ${total} fragments`)
@@ -90,6 +89,16 @@ export default {
           for (const f of line.fragments) { x += f.gapBefore; draw(f, x, i * lineHeight); x += f.occupiedWidth }
         })
         return lines.length + 1
+      },
+      // line height hard-coded to 20
+      (prepared, maxWidth, lineHeight, draw) => {
+        let n = 0
+        walkRichInlineLineRanges(prepared, maxWidth, (r) => {
+          let x = 0
+          for (const f of materializeRichInlineLineRange(prepared, r).fragments) { x += f.gapBefore; draw(f, x, n * 20); x += f.occupiedWidth }
+          n++
+        })
+        return n
       },
     ],
   },

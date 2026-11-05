@@ -127,8 +127,9 @@ Its type has no `start` or `end`. At run time a materialized fragment still carr
 
 ```ts claim=rich-source-offsets
 const prepared = prepareRichInline([{ text: 'Ship', font: '16px Inter' }, { text: ' it now', font: '16px Inter' }])
-const line = materializeRichInlineLineRange(prepared, layoutNextRichInlineLineRange(prepared, 400))
-line.fragments[1] // → text 'it now', sourceStart 1, sourceEnd 7, gapBefore > 0, gapItemIndex 1
+const range = layoutNextRichInlineLineRange(prepared, 400) // null only for items with no lines
+const line = range === null ? null : materializeRichInlineLineRange(prepared, range)
+line?.fragments[1] // → text 'it now', sourceStart 1, sourceEnd 7, gapBefore > 0, gapItemIndex 1
 ```
 
 ```typescript
@@ -171,7 +172,7 @@ type RichInlineStats = {
 
 ## Items and boxes
 
-**Declare a mixed list as `Array<RichInlineItem | RichInlineBox>`.** Without the annotation, TypeScript widens `break: 'never'` in an array literal to `string`, and the list no longer type-checks at `prepareRichInline()`. Don't reach for `as const`: it makes a readonly tuple, which `prepareRichInline()` rejects (TS4104). When you read an item back, check that it has text before you read its font, since an entry may be a box:
+**Declare a mixed list as `Array<RichInlineItem | RichInlineBox>`.** Without the annotation, TypeScript widens `break: 'never'` in an array literal to `string`, and the list no longer type-checks at `prepareRichInline()`. Don't fix it with a list declared `as const`: that makes a readonly tuple, which `prepareRichInline()` rejects (TS4104). An array literal written inline in the call, `prepareRichInline([...] as const)` included, compiles, because the parameter type guides it. When you read an item back, check that it has text before you read its font, since an entry may be a box:
 
 ```ts
 const items: Array<RichInlineItem | RichInlineBox> = [
@@ -224,7 +225,7 @@ A paragraph's lines are painted a line at a time, from their fragments. Each fra
 - **`pre-wrap`:** paint each line with `white-space: pre`, since a line painted alone in `pre-wrap` can wrap again. In `pre-wrap`, fragments have no gaps: a fragment's `text` keeps its spaces, and its `occupiedWidth` leaves out what hangs at the line's end.
 - **Tabs in `pre-wrap`:** Pretext counts a tab's stops in its own item's font, as Safari does. Upstream says Chrome and Firefox count them in the paragraph's font, so a tab after a change of font, such as inside a code span, can land on a different stop there.
 - **Spans without padding can wrap differently too:** items are measured apart, while Chrome and Firefox kern across neighbouring elements in one font, per upstream.
-- **Heights are yours.** Give each item's element `line-height: 1` and each box `vertical-align: top`. A line is then as tall as the paragraph's line height or its tallest box, whichever is taller. Text in another size, or in a face whose ascent and descent differ, makes its line taller, and so does a chip whose vertical padding comes within a few px of the line height. While no item grows its line, the line count times the line height is the paragraph's height.
+- **Heights are yours.** When you paint fragments as inline elements in a line box, give each item's element `line-height: 1` and each box `vertical-align: top`. A line is then as tall as the paragraph's line height or its tallest box, whichever is taller. Text in another size, or in a face whose ascent and descent differ, makes its line taller, and so does a chip whose vertical padding comes within a few px of the line height. While no item grows its line, the line count times the line height is the paragraph's height. Fragments positioned absolutely, as in the bubble recipe below, sit in no line box: give each the paragraph's line height and place it at its line's `y`.
 
 ## Recipes
 
@@ -279,13 +280,16 @@ function renderBubble(bubble: HTMLElement, items: Array<RichInlineItem | RichInl
   const lineCount = paintRichLines(prepared, width, LINE_HEIGHT, (fragment, x, y) => {
     const item = items[fragment.itemIndex]
     const el = document.createElement('font' in item ? 'span' : 'img') // give the img its src yourself
-    el.style.cssText = `position:absolute;left:${x}px;top:${y}px;width:${fragment.occupiedWidth}px;height:${LINE_HEIGHT}px;box-sizing:border-box`
+    el.style.cssText = `position:absolute;left:${x}px;top:${y}px`
     if ('font' in item) {
-      el.textContent = fragment.text
+      el.textContent = fragment.text // the span's width comes from its text and padding
       el.style.font = item.font
       el.style.lineHeight = `${LINE_HEIGHT}px`
       el.style.whiteSpace = 'pre'
       el.style.padding = `0 ${(item.extraWidth ?? 0) / 2}px`
+    } else {
+      el.style.width = `${item.width}px` // the box width you prepared: whole or quarter px
+      el.style.height = `${LINE_HEIGHT}px`
     }
     bubble.append(el)
   })

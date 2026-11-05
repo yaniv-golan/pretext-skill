@@ -267,8 +267,8 @@ function endsAtSoftHyphen(prepared: PreparedTextWithSegments, line: LayoutLine) 
   return line.text.endsWith('-') && line.end.graphemeIndex === 0 && prepared.kinds[line.end.segmentIndex - 1] === 'soft-hyphen'
 }
 const hyphenated = prepareWithSegments('in\u00ADcom\u00ADpre\u00ADhen\u00ADsi\u00ADble', '16px Inter')
-const first = materializeLineRange(hyphenated, layoutNextLineRange(hyphenated, 60))
-endsAtSoftHyphen(hyphenated, first) // true where the line broke at a soft hyphen
+const range = layoutNextLineRange(hyphenated, 60) // null only for text with no lines
+if (range !== null) endsAtSoftHyphen(hyphenated, materializeLineRange(hyphenated, range)) // true where the line broke at a soft hyphen
 ```
 
 ---
@@ -394,7 +394,7 @@ type PreparedTextWithSegments = PreparedText & {
 }
 ```
 
-See [Prepared handle fields](#prepared-handle-fields). All three are read-only: copy one before you pass it on as an array or call array methods on it.
+See [Prepared handle fields](#prepared-handle-fields). All three are read-only: copy one before you pass it on as a mutable array or write to it. `segments` and `kinds` are readonly arrays, so their non-mutating array methods work; `widths` is only `ArrayLike<number>`, so copy it (`Array.from(prepared.widths)`) before any array method, spread or `for...of`.
 
 ```typescript
 type PrepareOptions = {
