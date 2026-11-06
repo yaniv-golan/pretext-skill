@@ -44,9 +44,11 @@ This skill teaches AI agents how to use pretext correctly. Tracks `@chenglou/pre
 ### Claude.ai (Web)
 
 1. Download [`pretext-skill.zip`](https://github.com/yaniv-golan/pretext-skill/releases/latest/download/pretext-skill.zip)
-2. Click **Customize** in the sidebar
-3. Go to **Skills** and click **+**
+2. Click **Customize** in the sidebar and go to **Skills**
+3. Click **+**, then **Create skill**
 4. Choose **Upload a skill** and upload the zip file
+
+Skills need code execution turned on: **Settings → Capabilities** on individual plans, or **Organization settings → Plugins & skills** on Team and Enterprise.
 
 ### Claude Desktop
 
@@ -90,7 +92,7 @@ Or from within a Claude Code session:
 
 ### ChatGPT
 
-> **Note:** ChatGPT Skills are currently in beta, available on Business, Enterprise, Edu, Teachers, and Healthcare plans only.
+> **Note:** ChatGPT Skills are available on Business, Enterprise, Edu, and Healthcare workspaces, where an admin may need to turn them on. See [Skills in ChatGPT](https://help.openai.com/en/articles/20001066-skills-in-chatgpt) for current eligibility.
 
 1. Download [`pretext-skill.zip`](https://github.com/yaniv-golan/pretext-skill/releases/latest/download/pretext-skill.zip)
 2. Upload at [chatgpt.com/skills](https://chatgpt.com/skills)
@@ -100,8 +102,10 @@ Or from within a Claude Code session:
 Use the built-in skill installer:
 
 ```
-$skill-installer https://github.com/yaniv-golan/pretext-skill
+$skill-installer https://github.com/yaniv-golan/pretext-skill/tree/main/pretext/skills/pretext
 ```
+
+The installer needs the path to the skill folder, not just the repo. Restart Codex afterwards so it picks up the skill.
 
 Or install manually:
 
@@ -110,7 +114,7 @@ Or install manually:
 
 ### Any Agent (npx)
 
-Works with Claude Code, Cursor, Copilot, Windsurf, and [40+ other agents](https://github.com/vercel-labs/skills):
+Works with Claude Code, Cursor, Copilot, Windsurf, and [75+ other agents](https://github.com/vercel-labs/skills):
 
 ```bash
 npx skills add yaniv-golan/pretext-skill
