@@ -14,6 +14,7 @@ Coverage for the creative demos around Pretext: letters that move on their own, 
 - `migration.md`: what to change in code taken from community demos
 - `evals/pretext/triggers.json` and `grading/run-triggers.mjs`: a trigger eval that runs headless Claude against the working-tree plugin
 - Evals 13 and 14, with `e13-check.js` (a pixel test against one `fillText` per line) and `e14-check.js`
+- `evals/pretext/cowork/e13-exploding-characters.yaml` and `e14-text-around-body.yaml`: [cowork-harness](https://github.com/yaniv-golan/cowork-harness) scenarios for the two new evals, with rubric claims graded by a judge model
 
 ### Changed
 - The `description` now covers canvas text whose letters move on their own, and obstacles that move every frame. To stay within 700 characters it drops `layoutNextLineRange` (still in the body) and "with ellipsis"
@@ -26,6 +27,10 @@ Coverage for the creative demos around Pretext: letters that move on their own, 
 - Verified on Chromium and WebKit only; not tested on Firefox
 - Trigger eval, 23 prompts × 3 runs, before and after the new description (3 timed-out runs left out of the baseline): moving-letters prompts 3/10 to 11/12, held-out prompts 1/8 to 9/9, established prompts 33/33 both times, prompts that shouldn't trigger 0/12 both times. Three near-miss prompts added afterwards (GSAP SplitText, CSS letter waves, Three.js text) scored 0/9 on the new description only
 - Reading those numbers: all 3 baseline hits in the moving-letters group were one prompt (`explode`), which hit 0/2 in an earlier run, so it is noisy. `tetris`, scored as either way, went 0/3 to 3/3, though a fixed letter grid may not need Pretext. The held-out prompts were written with the same plan as the description, so 9/9 isn't independent evidence. One machine, one model, with this machine's installed skills competing
+- Paired before/after eval with [cowork-harness](https://github.com/yaniv-golan/cowork-harness) `eval`: `main` against this release, 7 scenarios × 5 runs per arm, interleaved, agent Sonnet 5.5 and judge Opus 5.5 pinned, under Cowork's runtime. cowork-harness ran the whole comparison, from snapshotting both versions to the per-claim exact tests, and its kept runs let a misworded claim be re-graded without re-running the agent
+  - Exploding letters (e13): the per-character x claim went from 0/5 to 5/5, and the generated files pass `e13-check.js` 5/5 against 0/5 (the 0.3.0 skill's builds misplaced 65 of about 160 letters each, by measuring the text before each letter)
+  - Text on both sides of a body (e14): no measurable difference. Both versions passed every claim and `e14-check.js` 5/5, so Sonnet 5.5 handles this prompt without the band recipe
+  - The five existing scenarios showed no regression: 49 of 52 rows passed 5/5 in both versions. At 5 runs per arm a small drop in one row would not show
 - Known limits of `glyphPositions`: Inter's contextual alternates (`10:30`, `1x2`, `->`) differ from a lone glyph, and WebKit reports `actualBoundingBoxLeft/Right` as the advance box; both are held by verifier claims
 
 ## [0.3.0] - 2026-11-06

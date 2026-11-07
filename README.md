@@ -167,6 +167,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the full version history. The latest releas
 
 - [docs/cross-platform.md](docs/cross-platform.md) — how this single repo ships to Claude Code, Cursor, ChatGPT, Manus, Codex CLI, and any agentskills.io host
 - [VERSIONING.md](VERSIONING.md) — version source-of-truth and release process
+- `evals/pretext/cowork/` — scenarios for [cowork-harness](https://github.com/yaniv-golan/cowork-harness), which runs the skill under Claude Cowork's runtime and compares two versions of it with `cowork-harness eval`. It's how changes to this skill are checked against real agent runs before release
 
 ## License
 
