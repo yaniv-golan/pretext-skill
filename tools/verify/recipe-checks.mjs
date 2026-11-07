@@ -264,6 +264,30 @@ function refMaskBlocker({ topRowOnly = false, scaleX = true, firstRunOnly = fals
 }
 const sameIntervals = (a, b) => a.length === b.length && a.every((v, i) => Math.abs(v.left - b[i].left) < 1e-9 && Math.abs(v.right - b[i].right) < 1e-9)
 const BLOCKERS = (cw) => [[], [{ x: cw / 2, y: 100, r: 60 }], [{ x: 20, y: 70, r: 40 }, { x: cw - 20, y: 150, r: 40 }], [{ x: 60, y: 90, r: 50 }]]
+// buildGlyphPalette with faults, for its mutants.
+function refGlyphPalette({ inkFromIndex = false, sorted = true, widthFilter = true, space = true } = {}) {
+  return (chars, fonts, cellWidth, cellHeight) => {
+    const canvas = document.createElement('canvas')
+    canvas.width = cellWidth; canvas.height = cellHeight
+    const g = canvas.getContext('2d', { willReadFrequently: true })
+    const all = []
+    for (const font of fonts) [...chars].forEach((char, i) => {
+      const width = measureNaturalWidth(prepare(char, font, { whiteSpace: 'pre-wrap' }))
+      if (widthFilter && width > cellWidth) return
+      g.clearRect(0, 0, cellWidth, cellHeight)
+      g.font = font; g.textBaseline = 'middle'
+      g.fillText(char, (cellWidth - width) / 2, cellHeight / 2)
+      let ink = 0
+      const data = g.getImageData(0, 0, cellWidth, cellHeight).data
+      for (let p = 3; p < data.length; p += 4) ink += data[p]
+      all.push({ char, font, width, ink: inkFromIndex ? i : ink })
+    })
+    const top = Math.max(...all.map((p) => p.ink))
+    const palette = all.map((p) => ({ ...p, ink: p.ink / top })).filter((p) => space || p.char !== ' ')
+    return sorted ? palette.sort((a, b) => a.ink - b.ink) : palette.reverse()
+  }
+}
+const nearestInk = (palette, ink) => Math.min(...palette.map((p) => Math.abs(p.ink - ink)))
 function refLayoutAroundCircle({ slot = bandSlot, minSlot = MIN_SLOT, skipTouched = false, advance = true, dropFirst = false, ignoreCircle = false } = {}) {
   return (prepared, containerWidth, lineHeight, circle) => {
     if (containerWidth < minSlot) return []
@@ -974,6 +998,77 @@ export default {
       refMaskBlocker({ scaleX: false }),
       refMaskBlocker({ firstRunOnly: true }),
       refMaskBlocker({ merge: false }),
+    ],
+  },
+
+  // buildGlyphPalette(chars, fonts, cellWidth, cellHeight) => glyphs that fit the cell, by ink; pickGlyph in its block.
+  buildGlyphPalette: {
+    check(fn) {
+      const p = fn(' .:-=+*#%@ilj', [FONT], 16, 20)
+      const ink = (c) => p.find((g) => g.char === c)?.ink
+      assert(p.every((g, i) => i === 0 || p[i - 1].ink <= g.ink), `not sorted by ink: ${show(p.map((g) => g.char).join(''))}`)
+      assert(p.every((g) => g.width <= 16), 'a glyph is wider than the cell')
+      assert(ink(' ') === 0, `space ink ${ink(' ')}`)
+      assert(Math.max(...p.map((g) => g.ink)) === 1, 'ink not normalized to 1')
+      assert(ink('@') > ink('.'), `@ ${ink('@')} not above . ${ink('.')}`)
+      assert(ink('i') < ink('*'), `i ${ink('i')} not below * ${ink('*')}: ink must come from drawing`)
+      const q = fn('WM.', [FONT], 12, 20)
+      for (const c of 'WM') assert(q.some((g) => g.char === c) === preWrapWidth(c) <= 12, `${c}: cell filter`)
+      assert(q.some((g) => g.char === ' '), 'no space in a palette built without one')
+      const pick = globalThis.__recipes.pickGlyph
+      if (pick && fn === globalThis.__recipes.buildGlyphPalette) {
+        assert(pick(p, 0).char === ' ' && pick(p, 1).ink === 1, 'pickGlyph ends')
+        let seed = 7
+        for (let n = 0; n < 50; n++) {
+          seed = (seed * 16807) % 2147483647
+          const v = seed / 2147483647
+          assert(Math.abs(Math.abs(pick(p, v).ink - v) - nearestInk(p, v)) < 1e-12, `pickGlyph(${v}) gave ink ${pick(p, v).ink}`)
+        }
+      }
+    },
+    mutants: [
+      refGlyphPalette({ sorted: false }),
+      refGlyphPalette({ widthFilter: false }),
+      refGlyphPalette({ inkFromIndex: true }),
+      refGlyphPalette({ space: false }),
+    ],
+  },
+
+  // placeAsciiRow(row, palette, cellWidth) => glyphs, each centred in its column.
+  placeAsciiRow: {
+    check(fn) {
+      const palette = [[' ', 0], ['.', 0.2], ['*', 0.5], ['@', 1]].map(([char, ink]) => ({ char, font: FONT, width: preWrapWidth(char), ink }))
+      const CELL = 16, COLS = 80
+      const rows = [new Array(COLS).fill(0), new Array(COLS).fill(1), Array.from({ length: COLS }, (_, c) => c % 2)]
+      const ends = []
+      for (const row of rows) {
+        const placed = fn(row, palette, CELL)
+        assert(placed.length === COLS, `${placed.length} glyphs`)
+        placed.forEach((g, c) => {
+          const glyph = palette.find((p) => p.char === g.char)
+          assert(glyph.ink === row[c] || row[c] === 0 && g.char === ' ', `column ${c}: picked ${show(g.char)} for ${row[c]}`)
+          assert(Math.abs(g.x - (c * CELL + (CELL - glyph.width) / 2)) <= 0.01, `column ${c}: x ${g.x}`)
+          assert(g.x >= c * CELL && g.x + glyph.width <= (c + 1) * CELL, `column ${c} leaves its cell`)
+        })
+        const last = placed[COLS - 1], lastGlyph = palette.find((p) => p.char === last.char)
+        ends.push(last.x + lastGlyph.width)
+      }
+      assert(Math.abs(ends[0] - ends[1]) <= CELL, `rows end ${ends[0]} and ${ends[1]}: they drift`)
+    },
+    mutants: [
+      (row, palette, cellWidth) => { // the old recipe: each glyph after the last
+        let x = 0
+        return row.map((v) => {
+          const g = palette.reduce((a, b) => (Math.abs(b.ink - v) < Math.abs(a.ink - v) ? b : a))
+          const placed = { char: g.char, font: g.font, x }
+          x += g.width
+          return placed
+        })
+      },
+      (row, palette, cellWidth) => row.map((v, c) => { // left-aligned in the cell
+        const g = palette.reduce((a, b) => (Math.abs(b.ink - v) < Math.abs(a.ink - v) ? b : a))
+        return { char: g.char, font: g.font, x: c * cellWidth }
+      }),
     ],
   },
 }

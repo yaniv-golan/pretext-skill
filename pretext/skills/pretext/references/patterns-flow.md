@@ -333,31 +333,7 @@ For a full Knuth-Plass paragraph layout with badness, demerits and hyphenation, 
 
 These use the same API; the creativity is in how widths are computed and lines painted.
 
-### ASCII art
-
-Measure each character of the ramp once, then place characters by those widths. A lone space measures 0 in `white-space: normal`, so measure with `pre-wrap`:
-
-```ts
-const RAMP = ' .:-=+*#%@'
-
-function rampWidths(font: string): Map<string, number> {
-  const widths = new Map<string, number>()
-  for (const char of RAMP) widths.set(char, measureNaturalWidth(prepare(char, font, { whiteSpace: 'pre-wrap' })))
-  return widths
-}
-
-function renderFrame(ctx: CanvasRenderingContext2D, density: number[][], font: string, lineHeight: number, widths: Map<string, number>) {
-  ctx.font = font
-  density.forEach((row, r) => {
-    let x = 0
-    for (const d of row) {
-      const char = RAMP[Math.floor(d * (RAMP.length - 1))]
-      ctx.fillText(char, x, r * lineHeight)
-      x += widths.get(char)!
-    }
-  })
-}
-```
+ASCII art and letters that move on their own are in [patterns-glyphs.md](patterns-glyphs.md#proportional-ascii-art).
 
 ### Magazine columns
 
