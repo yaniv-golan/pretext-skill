@@ -32,6 +32,6 @@
     { "pattern": "exact text metrics", "exempt": [] },
     { "pattern": "computes exact", "exempt": [] },
     { "pattern": "(in the|upstream|npm) (npm |upstream )?package(?!\\.json)", "exempt": ["migration.md"] },
-    { "pattern": "Intl\\.Segmenter", "exempt": ["accuracy.md", "api.md", "SKILL.md", "migration.md"] }
+    { "pattern": "Intl\\.Segmenter", "exempt": ["accuracy.md", "api.md", "SKILL.md", "migration.md", "patterns-glyphs.md"] }
   ]
 }

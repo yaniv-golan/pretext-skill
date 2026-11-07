@@ -14,7 +14,7 @@ import { freeze, produce } from 'immer'
 import { createElement, useEffect, useMemo, useState } from 'react'
 import { renderToString } from 'react-dom/server'
 import { hydrateRoot } from 'react-dom/client'
-import { PARITY_TEXTS, FONT, LINE_HEIGHT } from './corpus.mjs'
+import { PARITY_TEXTS, FONT, LINE_HEIGHT, GLYPH_TEXTS, glyphPaintRatio } from './corpus.mjs'
 
 const BROWSERS = ['chromium', 'webkit', 'firefox']
 const T = PARITY_TEXTS[0]
@@ -367,6 +367,24 @@ export const CLAIMS = [
         assert(Number(host.textContent) > 0, `effect did not render a height: ${JSON.stringify(host.textContent)}`)
         host.remove()
       } finally { console.error = origError }
+    },
+  },
+  {
+    id: 'glyph-positions-paint', source: PROBE + ': recipe 0, running sum over 1 of the line ink, 16px Inter', engines: ['chromium', 'webkit'], recipe: 'glyphPositions',
+    run() {
+      const ctx = document.createElement('canvas').getContext('2d')
+      ctx.font = FONT
+      const text = GLYPH_TEXTS[0]
+      const recipe = glyphPaintRatio(text, globalThis.__recipes.glyphPositions(ctx, text))
+      assert(recipe <= 0.02, `recipe differs from one fillText by ${recipe}`)
+      let x = 0
+      const summed = [...new Intl.Segmenter().segment(text)].map(({ segment: grapheme }) => {
+        const box = { grapheme, x }
+        x += ctx.measureText(grapheme).width
+        return box
+      })
+      const naive = glyphPaintRatio(text, summed)
+      assert(naive > 0.5, `summing own widths differs by only ${naive}`)
     },
   },
 ]

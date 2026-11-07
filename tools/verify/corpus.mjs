@@ -26,3 +26,26 @@ export const CLAMP_TEXTS = [
 ]
 // Real hyphens ('well-known', 're-entry') beside soft-hyphen break points.
 export const PAINTABLE_TEXT = 'well-known contre-pro\u00ADposition co\u00ADoperate re-entry'
+
+// Per-character recipes. Kerned capitals first; the third text keeps U+0301 as an escape so that
+// normalizing this file can't compose it, and holds the ZWJ emoji the grapheme split must keep whole.
+export const GLYPH_TEXTS = ['AVATAR Tokyo WAVE To Ty Yo', 'We Were Taking Awkward Vows', 'café 👩‍👩‍👧 ok', 'office affinity fjord']
+export const GLYPH_PAINT_TEXTS = GLYPH_TEXTS.filter((t) => !/\p{Extended_Pictographic}/u.test(t))
+
+// How far drawing each box's grapheme at its x is from one fillText of the whole line:
+// sum of |alpha difference| over the line's total alpha. 0 means the same pixels.
+export function glyphPaintRatio(text, boxes, font = FONT) {
+  const draw = (paint) => {
+    const c = document.createElement('canvas')
+    c.width = 600; c.height = 40
+    const g = c.getContext('2d', { willReadFrequently: true })
+    g.font = font; g.textBaseline = 'top'
+    paint(g)
+    return g.getImageData(0, 0, 600, 40).data
+  }
+  const whole = draw((g) => g.fillText(text, 2, 8))
+  const parts = draw((g) => { for (const b of boxes) g.fillText(b.grapheme, 2 + b.x, 8) })
+  let diff = 0, ink = 0
+  for (let i = 3; i < whole.length; i += 4) { diff += Math.abs(whole[i] - parts[i]); ink += whole[i] }
+  return diff / ink
+}

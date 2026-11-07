@@ -8,7 +8,7 @@ import {
 import {
   prepare, prepareWithSegments, layout, layoutWithLines, layoutNextLine, layoutNextLineRange, measureLineStats, measureNaturalWidth,
 } from '@chenglou/pretext'
-import { FONT, PARITY_TEXTS, CLAMP_TEXTS, PAINTABLE_TEXT, STREAM_REPLY } from './corpus.mjs'
+import { FONT, PARITY_TEXTS, CLAMP_TEXTS, PAINTABLE_TEXT, STREAM_REPLY, GLYPH_TEXTS, GLYPH_PAINT_TEXTS, glyphPaintRatio } from './corpus.mjs'
 
 function assert(cond, msg) { if (!cond) throw new Error(msg) }
 const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b)
@@ -745,5 +745,58 @@ export default {
       }
     },
     mutants: [() => true, () => false, wholeStackDrawsU2010],
+  },
+
+  // glyphPositions(ctx, text) => [{ grapheme, x, width }]: where one fillText of the line puts each grapheme.
+  glyphPositions: {
+    check(fn) {
+      const ctx = document.createElement('canvas').getContext('2d')
+      ctx.font = FONT
+      const w = (s) => ctx.measureText(s).width
+      const kern = Math.abs(graphemes(GLYPH_TEXTS[0]).reduce((a, g) => a + w(g), 0) - w(GLYPH_TEXTS[0]))
+      assert(kern > 5, `corpus too weak: font does not kern (${kern}px)`)
+      for (const text of GLYPH_TEXTS) {
+        const boxes = fn(ctx, text)
+        assert(eq(boxes.map((b) => b.grapheme), graphemes(text)), `${show(text)}: graphemes ${show(boxes.map((b) => b.grapheme))}`)
+        assert(Math.abs(boxes[0].x) <= 0.01, `${show(text)}: first x is ${boxes[0].x}`)
+        for (const b of boxes) assert(Math.abs(b.width - w(b.grapheme)) <= 0.01, `${show(text)}: ${show(b.grapheme)} width ${b.width}`)
+      }
+      for (const text of GLYPH_PAINT_TEXTS) {
+        const ratio = glyphPaintRatio(text, fn(ctx, text))
+        assert(ratio <= 0.02, `${show(text)}: painted glyphs differ from the line by ${ratio}`)
+      }
+    },
+    mutants: [
+      (ctx, text) => { // adds up standalone widths, so kerning is lost
+        let x = 0
+        return graphemes(text).map((grapheme) => { const width = ctx.measureText(grapheme).width, box = { grapheme, x, width }; x += width; return box })
+      },
+      (ctx, text) => { // prefix without the glyph misses the kerning pair before it
+        let at = 0
+        return graphemes(text).map((grapheme) => {
+          const box = { grapheme, x: ctx.measureText(text.slice(0, at)).width, width: ctx.measureText(grapheme).width }
+          at += grapheme.length
+          return box
+        })
+      },
+      (ctx, text) => { // code points instead of graphemes
+        let at = 0
+        return Array.from(text).map((grapheme) => {
+          at += grapheme.length
+          const width = ctx.measureText(grapheme).width
+          return { grapheme, x: ctx.measureText(text.slice(0, at)).width - width, width }
+        })
+      },
+      (ctx, text) => { // each segment's width spread evenly over its graphemes
+        const prepared = prepareWithSegments(text, FONT)
+        const boxes = []
+        let x = 0
+        prepared.segments.forEach((segment, i) => {
+          const parts = graphemes(segment), width = prepared.widths[i] / parts.length
+          for (const grapheme of parts) { boxes.push({ grapheme, x, width }); x += width }
+        })
+        return boxes
+      },
+    ],
   },
 }

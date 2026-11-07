@@ -185,6 +185,7 @@ Common mistakes:
 | [rich-inline.md](references/rich-inline.md) | The 5 `/rich-inline` functions, items and boxes, painting fragments, recipes | Mixed fonts, chips, mentions, code spans, inline images |
 | [patterns-sizing.md](references/patterns-sizing.md) | Wrapper, auto-fit, cards, shrink-wrap, iterative search, truncation, live-edited text, virtualized lists, streaming | Heights, widths, line counts, fitting or clamping |
 | [patterns-flow.md](references/patterns-flow.md) | `paintableText`, obstacles, SVG per line, balanced layout, editorial, ASCII, 3D, animation | Placing lines yourself: variable widths, canvas, SVG |
+| [patterns-glyphs.md](references/patterns-glyphs.md) | Per-character positions, ink bounds, proportional ASCII | Letters that move on their own: particles, games, ASCII art |
 | [patterns-integration.md](references/patterns-integration.md) | Frameworks and SSR, progressive enhancement, vendoring, outside the browser | Wiring into an app, a build, a server or a worker |
 | [accuracy.md](references/accuracy.md) | Painting, fonts, language, widths, CSS it doesn't model, runtimes, engines, bundle size | Results differ from what the page shows |
 | [migration.md](references/migration.md) | 0.0.x to 1.0.0: finding old usage, breaking and silent changes | The project is below 1.0.0, or old code is pasted |
