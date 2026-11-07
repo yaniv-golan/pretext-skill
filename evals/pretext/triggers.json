@@ -1,0 +1,144 @@
+{
+  "skill": "pretext",
+  "runs": 3,
+  "prompts": [
+    {
+      "id": "dragon",
+      "prompt": "Build me a single-file web page where a dragon follows the cursor and the paragraph text parts around its body every frame at 60fps.",
+      "expect": "trigger",
+      "set": "tuned"
+    },
+    {
+      "id": "bricks",
+      "prompt": "Make a brick-breaker game on a canvas where the bricks are the words of a paragraph, and the ball collides with each word at its real rendered size.",
+      "expect": "trigger",
+      "set": "tuned"
+    },
+    {
+      "id": "explode",
+      "prompt": "Build a click-to-explode effect for an article: every character flies apart as a physics particle on a canvas and then reassembles.",
+      "expect": "trigger",
+      "set": "tuned"
+    },
+    {
+      "id": "ascii",
+      "prompt": "Render a video as live ASCII art on a canvas using a proportional serif font, picking glyphs to match brightness.",
+      "expect": "trigger",
+      "set": "tuned"
+    },
+    {
+      "id": "chat",
+      "prompt": "Our chat log has 50,000 variable-height text messages and scrolling jumps because row heights are estimated. Make it stable without measuring DOM nodes.",
+      "expect": "trigger",
+      "set": "tuned"
+    },
+    {
+      "id": "crawl",
+      "prompt": "Build a perspective text crawl where the paragraph rewraps continuously as it recedes and the column narrows.",
+      "expect": "trigger",
+      "set": "tuned"
+    },
+    {
+      "id": "tetris",
+      "prompt": "Build a falling-blocks puzzle game in the browser where the pieces are made of letters instead of squares.",
+      "expect": "either",
+      "set": "tuned"
+    },
+    {
+      "id": "water",
+      "prompt": "Make the hero paragraph on our landing page react to the mouse, like the text is water and the cursor moves through it.",
+      "expect": "trigger",
+      "set": "tuned"
+    },
+    {
+      "id": "lyrics",
+      "prompt": "Build an audio-reactive lyrics visualizer in the browser: the words pulse and move with the music.",
+      "expect": "trigger",
+      "set": "tuned"
+    },
+    {
+      "id": "face",
+      "prompt": "Use the webcam so my face pushes the article text out of the way as I move.",
+      "expect": "trigger",
+      "set": "tuned"
+    },
+    {
+      "id": "adtext",
+      "prompt": "Add typewriter, bounce and wave text animations to our ad video generator, which draws on a canvas.",
+      "expect": "trigger",
+      "set": "tuned"
+    },
+    {
+      "id": "smoke",
+      "prompt": "Make a smoke simulation in the browser drawn entirely with text characters.",
+      "expect": "trigger",
+      "set": "tuned"
+    },
+    {
+      "id": "ctl-css",
+      "prompt": "How do I center a div and wrap long text inside it with CSS flexbox?",
+      "expect": "no-trigger",
+      "set": "tuned"
+    },
+    {
+      "id": "ctl-fire",
+      "prompt": "Add a fire particle system to my canvas game. No text involved.",
+      "expect": "no-trigger",
+      "set": "tuned"
+    },
+    {
+      "id": "core-float",
+      "prompt": "Our article is painted on a canvas, so CSS float is out. The text has to wrap around an image at the top left: lines beside it are shorter. How do I work out the lines?",
+      "expect": "trigger",
+      "set": "tuned"
+    },
+    {
+      "id": "core-clamp",
+      "prompt": "Card previews must be cut to 3 lines with an ellipsis, and I need the clamped strings themselves for an SVG export, not CSS line-clamp.",
+      "expect": "trigger",
+      "set": "tuned"
+    },
+    {
+      "id": "core-upgrade",
+      "prompt": "We're moving @chenglou/pretext from 0.0.8 to 1.0.0. What breaks in our layout code?",
+      "expect": "trigger",
+      "set": "tuned"
+    },
+    {
+      "id": "core-fonterr",
+      "prompt": "Since an upgrade I get \"Uncaught RangeError: font must be a font string Canvas takes\" in the console. What causes it?",
+      "expect": "trigger",
+      "set": "tuned"
+    },
+    {
+      "id": "ho-kinetic",
+      "prompt": "Make a title intro where each letter of the headline drops in from above and bounces into place, drawn on a canvas.",
+      "expect": "trigger",
+      "set": "heldout"
+    },
+    {
+      "id": "ho-shooter",
+      "prompt": "Build a browser game where words from a paragraph fall down the screen and you shoot them letter by letter.",
+      "expect": "trigger",
+      "set": "heldout"
+    },
+    {
+      "id": "ho-magnet",
+      "prompt": "Build a fridge-magnet poetry page: draggable word tiles that snap back into wrapped lines when you let go.",
+      "expect": "trigger",
+      "set": "heldout"
+    },
+    {
+      "id": "ho-svg-logo",
+      "prompt": "Animate our SVG logo so the outline draws itself on page load.",
+      "expect": "no-trigger",
+      "set": "heldout"
+    },
+    {
+      "id": "ho-confetti",
+      "prompt": "Add a confetti burst on a canvas when the user clicks the Buy button.",
+      "expect": "no-trigger",
+      "set": "heldout"
+    }
+  ]
+}
