@@ -13,6 +13,7 @@ Coverage for the creative demos around Pretext: letters that move on their own, 
 - `patterns-flow.md`: `layoutInBands`, `freeSlots`, `circleBlocker` and `maskBlocker`, for several slots per band, obstacles anywhere in the column, and mask-driven flow
 - `migration.md`: what to change in code taken from community demos
 - `evals/pretext/triggers.json` and `grading/run-triggers.mjs`: a trigger eval that runs headless Claude against the working-tree plugin
+- Evals 13 and 14, with `e13-check.js` (a pixel test against one `fillText` per line) and `e14-check.js`
 
 ### Changed
 - The `description` now covers canvas text whose letters move on their own, and obstacles that move every frame. To stay within 700 characters it drops `layoutNextLineRange` (still in the body) and "with ellipsis"
@@ -23,6 +24,7 @@ Coverage for the creative demos around Pretext: letters that move on their own, 
 
 ### Notes
 - Verified on Chromium and WebKit; Firefox could not be launched here and is unverified
+- Trigger eval, 23 prompts × 3 runs, before and after the new description (3 errored runs left out of the baseline): moving-letters prompts 3/10 to 11/12, held-out moving-letters prompts 1/8 to 9/9, established prompts 33/33 both times, prompts that shouldn't trigger 0/12 both times. One machine, one model, with this machine's installed skills competing; `explode` was noisy before the change
 
 ## [0.3.0] - 2026-11-06
 

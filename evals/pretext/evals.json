@@ -113,12 +113,12 @@
     {
       "id": 7,
       "name": "clamp-three-lines-more-link",
-      "prompt": "Feed cards show a post preview. I want at most 3 lines, and when the text is cut the last line ends in \u2026 followed by an inline \"more\" link about 44px wide, on the same line. We already use @chenglou/pretext (latest) for card heights.\n\nWrite `clamp.ts` exporting `clampPreview(text, font, width)`, which returns `{ lines: string[], truncated: boolean }`: the lines to show, the last one ending in \u2026 when cut. If you think this shouldn't be done in JS, give me the CSS in `clamp.css` instead. Either way, put a short note on your approach in `notes.md`.",
+      "prompt": "Feed cards show a post preview. I want at most 3 lines, and when the text is cut the last line ends in … followed by an inline \"more\" link about 44px wide, on the same line. We already use @chenglou/pretext (latest) for card heights.\n\nWrite `clamp.ts` exporting `clampPreview(text, font, width)`, which returns `{ lines: string[], truncated: boolean }`: the lines to show, the last one ending in … when cut. If you think this shouldn't be done in JS, give me the CSS in `clamp.css` instead. Either way, put a short note on your approach in `notes.md`.",
       "expected_output": "Either clamp.ts walks the lines and cuts the last one to leave room for the ellipsis and the link, as upstream's ellipsis demo does, or clamp.css uses line clamping and notes.md justifies that choice given the inline link. No space sits before the ellipsis.",
       "files": [],
       "assertions": [
         "[read] The approach is upstream's, laying out line by line and cutting the last line to leave room for the tail, or it is CSS line clamping with notes.md justifying how the inline link is handled",
-        "[run] If clamp.ts exists: at every width tried, 3 lines come back, truncated is true, and no white space sits before the \u2026: e7-check.js reports no `shape` or `space` entries in `bad`. If only clamp.css exists, this passes when no generated text puts a space before the ellipsis",
+        "[run] If clamp.ts exists: at every width tried, 3 lines come back, truncated is true, and no white space sits before the …: e7-check.js reports no `shape` or `space` entries in `bad`. If only clamp.css exists, this passes when no generated text puts a space before the ellipsis",
         "[run] If clamp.ts exists: the last line has text before the … and, with the 44px link, fits in width: e7-check.js reports no `room` or `empty` entries in `bad`",
         "[run] If clamp.ts exists: text that fits in 3 lines comes back whole with truncated false: e7-check.js `short`",
         "[tsc] If clamp.ts exists, it type-checks with zero diagnostics against the pinned 1.0.0 package (grading.typecheck)"
@@ -188,6 +188,32 @@
         "[read] answer.md has the user check that the element's content width equals the width given to layout(), padding and border excluded",
         "[read] answer.md doesn't say to stop letting CSS wrap the text. A <p> the browser wraps stays the recommended way to paint it, and rendering each line as its own element isn't given as the fix",
         "[read] answer.md keeps Pretext for sizing: measuring with the DOM instead, such as getBoundingClientRect or dropping layout(), isn't given as the fix"
+      ]
+    },
+    {
+      "id": 13,
+      "name": "exploding-characters",
+      "baseline_must_fail": true,
+      "prompt": "I'm adding a click-to-explode effect to an article painted on a canvas with one fillText per line, in plain JavaScript. I ran `npm i @chenglou/pretext` today. Before the explosion nothing should visibly move: the letters start exactly where the painted lines put them, then each one flies off as a particle.\n\nWrite `explode-layout.js`, an ES module exporting `layoutCharacters(text, font, maxWidth, lineHeight)`. It returns an array of `{ grapheme, x, y, width }`, one per character, with `x` from the start of the line and `y` the top of the line. Don't draw anything.",
+      "expected_output": "explode-layout.js gets the lines from layoutWithLines and each grapheme's x from canvas measureText of the line up to and including it, minus its own width. It reads no internal handle field and doesn't add up standalone widths.",
+      "files": [],
+      "assertions": [
+        "[tsc] explode-layout.js type-checks with zero diagnostics against the pinned 1.0.0 package (grading.typecheck)",
+        "[static] It reads no field of a prepared handle other than segments, kinds and widths",
+        "[run] Graphemes drawn at their x match one fillText of each line: `node run-export.mjs explode-layout.js e13-check.js` prints ok with an empty `bad`"
+      ]
+    },
+    {
+      "id": 14,
+      "name": "text-around-body-both-sides",
+      "baseline_must_fail": true,
+      "prompt": "A dragon follows the cursor through an article painted on a canvas, in plain JavaScript, and the text has to part around its body: text stays on both sides of it, wherever it is in the column. The body is a list of circles. I ran `npm i @chenglou/pretext` today.\n\nWrite `body-flow.js`, an ES module exporting `flowAroundBody(text, font, width, height, lineHeight, circles)`. `circles` is an array of `{ x, y, r }`. It returns an array of `{ text, x, y }`, one per placed piece of line, with `y` the top of the line. It runs on every frame. Don't draw anything.",
+      "expected_output": "body-flow.js fills every free slot of each band, left to right, with one running cursor through layoutNextLine(prepared, width, cursor). Slots come from the part of each circle anywhere in the band, not only at its centre, and slivers are skipped.",
+      "files": [],
+      "assertions": [
+        "[tsc] body-flow.js type-checks with zero diagnostics against the pinned 1.0.0 package (grading.typecheck)",
+        "[static] Every layoutNextLine or layoutNextLineRange call passes the width as the second argument and the cursor as the third",
+        "[run] Lines clear every circle, the text is complete and some band holds two lines: `node run-export.mjs body-flow.js e14-check.js` prints ok with an empty `bad`, `sameText` true and `twoInBand` true"
       ]
     }
   ]
