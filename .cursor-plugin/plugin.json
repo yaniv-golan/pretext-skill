@@ -1,7 +1,7 @@
 {
   "name": "pretext",
   "displayName": "Pretext",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "AI skill for @chenglou/pretext 1.0 — a TypeScript library that measures and lays out multiline text without DOM reflows",
   "author": {
     "name": "Yaniv Golan",

@@ -15,7 +15,7 @@ compatibility: Written for @chenglou/pretext 1.0.0 or later. Pre-1.0 projects ne
 license: MIT
 metadata:
   author: Yaniv Golan
-  version: "0.3.0"
+  version: "0.4.0"
 ---
 
 # Pretext Integration Guide
