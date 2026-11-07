@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Note: this file is the *technical* changelog for contributors — the GitHub Releases page may show user-facing release notes that summarize the same release differently.
 
+## [Unreleased]
+
+Coverage for the creative demos around Pretext: letters that move on their own, text on both sides of moving shapes, and proportional ASCII art.
+
+### Added
+- `references/patterns-glyphs.md`: `glyphPositions` for per-character positions, ink bounds for collisions, and a palette-based ASCII recipe (`buildGlyphPalette`, `pickGlyph`, `placeAsciiRow`)
+- `patterns-flow.md`: `layoutInBands`, `freeSlots`, `circleBlocker` and `maskBlocker`, for several slots per band, obstacles anywhere in the column, and mask-driven flow
+- `migration.md`: what to change in code taken from community demos
+- `evals/pretext/triggers.json` and `grading/run-triggers.mjs`: a trigger eval that runs headless Claude against the working-tree plugin
+
+### Changed
+- The `description` now covers canvas text whose letters move on their own, and obstacles that move every frame. To stay within 700 characters it drops `layoutNextLineRange` (still in the body) and "with ellipsis"
+- `SKILL.md` routes per-character and multi-slot requests, says when a fixed grid doesn't need Pretext, and warns that community demos mostly predate 1.0
+
+### Fixed
+- The ASCII recipe placed each character by its own width, which warps a picture in a proportional font. It now keeps a fixed cell grid
+
+### Notes
+- Verified on Chromium and WebKit; Firefox could not be launched here and is unverified
+
 ## [0.3.0] - 2026-11-06
 
 Rewrite to target `@chenglou/pretext` 1.0.0 (the skill's own version stays 0.x; 0.2.0 set the precedent for a multi-release upstream jump). The skill now covers `>=1.0.0` only; earlier versions go through `references/migration.md`.

@@ -1,15 +1,16 @@
 ---
 name: pretext
 description: >-
-  Help developers use @chenglou/pretext 1.0+, a TypeScript library that measures
-  and lays out multiline text without DOM reflow. Use for pretext,
-  @chenglou/pretext, /rich-inline, layoutNextLine, layoutNextLineRange, upgrading
-  pretext from 0.0.x to 1.0, or text height, line count, shrink-wrap, auto-fit
-  font size, line clamp with ellipsis, text around obstacles, and inline chips,
-  mentions or images computed in JS. Also for its errors: "font must be a font
-  string Canvas takes", "Text measurement requires OffscreenCanvas", or a
-  layoutNextLine loop that never ends. Do NOT use for CSS-only layout, generic
-  typography, or CSS shrink-to-fit questions.
+  Help developers use @chenglou/pretext 1.0+, which measures and lays out
+  multiline text without DOM reflow. Use for pretext, /rich-inline,
+  layoutNextLine, upgrading from 0.0.x, text height, line count, shrink-wrap,
+  auto-fit font size, line clamp, inline chips, mentions or images computed in
+  JS; text around obstacles, even sprites or masks moving every frame; and
+  canvas text whose letters move on their own: particles, game pieces, kinetic
+  type, ASCII art. Also for its errors: "font must be a font string Canvas
+  takes", "Text measurement requires OffscreenCanvas", or a layoutNextLine loop
+  that never ends. Do NOT use for CSS-only layout, generic typography, or CSS
+  shrink-to-fit questions.
 compatibility: Written for @chenglou/pretext 1.0.0 or later. Pre-1.0 projects need references/migration.md first.
 license: MIT
 metadata:
@@ -34,6 +35,7 @@ Read the project's `package.json` (or run `npm ls @chenglou/pretext`) before wri
 - **Lines and widths for painting with `fillText`** in canvas, SVG or WebGL. Paint each line's text through `paintableText`, a helper recipe in patterns-flow.md (not a library export), so soft-hyphen breaks draw the hyphen that was measured.
 - **Rich inline text**: mentions, chips, code spans and inline images, via `/rich-inline`.
 - **Shrink-wrap**: the tightest width for a chat bubble or label.
+- **Letters that move on their own** (particles, game pieces, ASCII art): Pretext breaks the lines; per-character positions come from canvas. See [patterns-glyphs.md](references/patterns-glyphs.md).
 
 ## When NOT to Use Pretext
 
@@ -41,6 +43,7 @@ Read the project's `package.json` (or run `npm ls @chenglou/pretext`) before wri
 - **Content is HTML, not text**: tables, code blocks and nested elements need DOM measurement.
 - **Virtualizers with mixed content** (images of unknown size, embeds, HTML): these need DOM measuring. When all content is Pretext-measured, Pretext heights work in a virtualizer such as TanStack Virtual with no `measureElement` loop.
 - **Accordion content with HTML structure**: measure it off-screen in the DOM.
+- **A fixed grid with nothing to wrap** (letters on a game board, a terminal view): the cell size is all you need.
 
 ## Quick Start
 
@@ -158,6 +161,8 @@ A handle belongs to the Pretext version that made it, and another version's hand
 | Truncate with an ellipsis | `prepare` to test; `prepareWithSegments` for the strings | `layout`; the [clamp recipe](references/patterns-sizing.md#truncating-with-an-ellipsis) |
 | Per-line text (canvas, SVG, animation) | `prepareWithSegments` | `layoutWithLines`, painted via [`paintableText`](references/patterns-flow.md#painting-a-lines-text) |
 | Flow text around obstacles | `prepareWithSegments` | `layoutNextLine` in a loop ([recipes](references/patterns-flow.md#text-around-obstacles)) |
+| Text in several slots per band (both sides of an obstacle, a mask) | `prepareWithSegments` | `layoutNextLine` per slot, [`layoutInBands`](references/patterns-flow.md#text-on-both-sides-and-in-shapes) |
+| Per-character positions (particles, games) | `prepareWithSegments` | `layoutWithLines`, then [`glyphPositions`](references/patterns-glyphs.md#per-character-positions) |
 | Variable widths, text only for painted lines | `prepareWithSegments` | `layoutNextLineRange` + `materializeLineRange` |
 | Mentions, chips, code spans inline | `prepareRichInline` (`/rich-inline`) | `walkRichInlineLineRanges` / `layoutNextRichInlineLineRange` |
 | Inline images or emoji | `prepareRichInline` with a `{ width }` box | the same ([boxes](references/rich-inline.md#boxes)) |
@@ -184,7 +189,7 @@ Common mistakes:
 | [api.md](references/api.md) | The 12 core functions, types and handle fields | Exact signatures or types for the main entry |
 | [rich-inline.md](references/rich-inline.md) | The 5 `/rich-inline` functions, items and boxes, painting fragments, recipes | Mixed fonts, chips, mentions, code spans, inline images |
 | [patterns-sizing.md](references/patterns-sizing.md) | Wrapper, auto-fit, cards, shrink-wrap, iterative search, truncation, live-edited text, virtualized lists, streaming | Heights, widths, line counts, fitting or clamping |
-| [patterns-flow.md](references/patterns-flow.md) | `paintableText`, obstacles, SVG per line, balanced layout, editorial, ASCII, 3D, animation | Placing lines yourself: variable widths, canvas, SVG |
+| [patterns-flow.md](references/patterns-flow.md) | `paintableText`, obstacles, both-side slots, masks, SVG per line, balanced layout, editorial, 3D, animation | Placing lines yourself: variable widths, canvas, SVG |
 | [patterns-glyphs.md](references/patterns-glyphs.md) | Per-character positions, ink bounds, proportional ASCII | Letters that move on their own: particles, games, ASCII art |
 | [patterns-integration.md](references/patterns-integration.md) | Frameworks and SSR, progressive enhancement, vendoring, outside the browser | Wiring into an app, a build, a server or a worker |
 | [accuracy.md](references/accuracy.md) | Painting, fonts, language, widths, CSS it doesn't model, runtimes, engines, bundle size | Results differ from what the page shows |
@@ -206,6 +211,8 @@ Live at https://chenglou.me/pretext/. In the repository: clone, `bun install`, `
 - `masonry`: masonry from predicted heights
 - `rich-note`: notes with mentions and chips
 - `variable-typographic-ascii`: ASCII art from glyph widths
+
+Community demos (pretext.cool, awesome-pretext) mostly predate 1.0: they pass `layoutNextLine` its cursor second, and some read handle internals. Use them for ideas, and take signatures from the references ([migration.md](references/migration.md#code-from-community-demos)).
 
 ## Performance
 

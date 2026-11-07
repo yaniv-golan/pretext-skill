@@ -10,6 +10,7 @@ Use this file when a project uses `@chenglou/pretext` below 1.0.0, or when code 
 4. [Silent changes](#silent-changes)
 5. [Optional simplifications](#optional-simplifications)
 6. [From before 0.0.9](#from-before-009)
+7. [Code from community demos](#code-from-community-demos)
 
 ## Check the version
 
@@ -153,3 +154,10 @@ function lineWidths(text: string, widthAt: (y: number) => number, lineHeight: nu
 ## From before 0.0.9
 
 0.0.9 only fixed bugs, and its fixes need no code change. From any 0.0.x version, upgrade straight to 1.0.0 and follow this file.
+
+## Code from community demos
+
+Demos on pretext.cool and in awesome-pretext mostly pin `0.0.x` releases. Take the idea, not the calls. Before copying from one:
+
+- Fix the argument order: `layoutNextLine(prepared, cursor, width)` is now `layoutNextLine(prepared, width, cursor)`, and the old order hangs (see [Breaking changes](#breaking-changes)).
+- Replace reads of handle fields the 1.0 type doesn't show, such as `breakableFitAdvances`, which has no public equivalent, with [`glyphPositions`](patterns-glyphs.md#per-character-positions).
