@@ -151,7 +151,7 @@ function layoutAroundCircles(prepared: PreparedTextWithSegments, containerWidth:
 }
 ```
 
-An obstacle on the left needs an x offset for each line as well as a narrower width, and text on both sides of an obstacle needs two slots per band. Neither is covered here; upstream's [editorial-engine.ts](https://github.com/chenglou/pretext/blob/v1.0.0/pages/demos/editorial-engine.ts) fills every slot in a band.
+An obstacle on the left needs an x offset for each line as well as a narrower width, and text on both sides of an obstacle needs two slots per band: see [Text on both sides and in shapes](#text-on-both-sides-and-in-shapes).
 
 ### Range routing: build only the lines you paint
 
@@ -173,6 +173,91 @@ function visibleLines(prepared: PreparedTextWithSegments, circles: Circle[], con
   return visible // paint each line's text through paintableText
 }
 ```
+
+### Text on both sides and in shapes
+
+For an obstacle anywhere in the column, many bodies at once such as a dragon's segments, or a silhouette from a video frame or webcam mask. Each band can hold several slots. One running cursor fills them from left to right, so the text still reads in order across the band.
+
+```ts run id=layoutInBands,freeSlots,circleBlocker needs=layoutAroundCircle
+type Interval = { left: number; right: number }
+type BandLine = { text: string; x: number; y: number; width: number; maxWidth: number; end: LayoutCursor }
+
+// What is left of 0..containerWidth once `blocked` is taken out, left to right, slivers dropped.
+function freeSlots(blocked: Interval[], containerWidth: number, minSlot: number): Interval[] {
+  const slots: Interval[] = []
+  let left = 0
+  for (const b of [...blocked].sort((p, q) => p.left - q.left)) {
+    if (b.left > left) slots.push({ left, right: Math.min(b.left, containerWidth) })
+    left = Math.max(left, b.right)
+  }
+  if (left < containerWidth) slots.push({ left, right: containerWidth })
+  return slots.filter((slot) => slot.right - slot.left >= minSlot)
+}
+
+function circleBlocker(circles: Circle[]) {
+  return (top: number, bottom: number): Interval[] =>
+    circles.flatMap((circle) => circleIntervalForBand(circle, top, bottom) ?? [])
+}
+
+// With `loop`, the text starts again when it runs out, for decorative text that fills a shape.
+function layoutInBands(
+  prepared: PreparedTextWithSegments, containerWidth: number, containerHeight: number, lineHeight: number,
+  blockedAt: (top: number, bottom: number) => Interval[], loop = false,
+): BandLine[] {
+  const lines: BandLine[] = []
+  let cursor: LayoutCursor | undefined
+  for (let y = 0; y + lineHeight <= containerHeight; y += lineHeight) {
+    for (const slot of freeSlots(blockedAt(y, y + lineHeight), containerWidth, MIN_SLOT)) {
+      const maxWidth = slot.right - slot.left
+      let line = layoutNextLine(prepared, maxWidth, cursor)
+      if (line === null && loop) line = layoutNextLine(prepared, maxWidth) // again from the start
+      if (line === null) return lines // the text ended, or it is empty
+      lines.push({ text: line.text, x: slot.left, y, width: line.width, maxWidth, end: line.end })
+      cursor = line.end
+    }
+  }
+  return lines
+}
+```
+
+```ts needs=layoutInBands,paintableText
+const FLOW_FONT = '16px Inter'
+const flowed = prepareWithSegments(longText, FLOW_FONT) // once
+const body = [{ x: 200, y: 120, r: 50 }, { x: 260, y: 170, r: 36 }, { x: 310, y: 210, r: 24 }]
+
+function paintFlow() { // every frame, after moving `body`
+  ctx.font = FLOW_FONT
+  ctx.textBaseline = 'top'
+  for (const line of layoutInBands(flowed, 600, 800, 20, circleBlocker(body))) ctx.fillText(paintableText(flowed, line, FLOW_FONT), line.x, line.y)
+}
+```
+
+Any shape works if you can say which part of a band it covers. A mask gives that directly: one value per pixel, such as a frame's alpha or a thresholded webcam segmentation, non-zero where the shape is. A column is blocked when any mask row in the band covers it, the same whole-band rule as for a circle. Build the blocker from each new frame:
+
+```ts run id=maskBlocker
+function maskBlocker(mask: ArrayLike<number>, maskWidth: number, maskHeight: number, containerWidth: number, containerHeight: number) {
+  const scaleX = containerWidth / maskWidth, scaleY = containerHeight / maskHeight
+  return (top: number, bottom: number): { left: number; right: number }[] => {
+    const covered = new Uint8Array(maskWidth)
+    for (let row = 0; row < maskHeight; row++) {
+      if (row * scaleY >= bottom || (row + 1) * scaleY <= top) continue
+      for (let column = 0; column < maskWidth; column++) if (mask[row * maskWidth + column]) covered[column] = 1
+    }
+    const intervals: { left: number; right: number }[] = []
+    for (let column = 0; column < maskWidth; column++) {
+      if (!covered[column]) continue
+      const start = column
+      while (column + 1 < maskWidth && covered[column + 1]) column++
+      intervals.push({ left: start * scaleX, right: (column + 1) * scaleX })
+    }
+    return intervals
+  }
+}
+```
+
+- To fill the shape instead of flowing around it, block its outside: pass a mask with the values inverted.
+- For padding around each obstacle, widen its intervals; upstream's [editorial-engine.ts](https://github.com/chenglou/pretext/blob/v1.0.0/pages/demos/editorial-engine.ts) does this per obstacle.
+- Mixed-direction text has the limits in [accuracy.md](accuracy.md#painting), as for any line painted on its own.
 
 ---
 
@@ -303,6 +388,6 @@ function flowColumns(
 For text that wraps around a 3D object, or any shape you can rasterize:
 
 1. Each frame, project the shape into a 2D silhouette.
-2. For each line's band, find the free interval beside the silhouette, as `circleIntervalForBand` does for a circle.
-3. Pass that width to `layoutNextLine()`, or to `layoutNextLineRange()` for lines you don't paint, skipping bands narrower than `MIN_SLOT`.
-4. Paint each line at its band, through `paintableText`.
+2. Rasterize it into a mask and build a blocker with [`maskBlocker`](#text-on-both-sides-and-in-shapes).
+3. Pass that to `layoutInBands`, which fills the free slots of each band and skips those narrower than `MIN_SLOT`.
+4. Paint each line at its `x` and `y`, through `paintableText`.

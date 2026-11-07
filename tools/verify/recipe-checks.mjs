@@ -183,6 +183,87 @@ function centreSlot(top, lineHeight, containerWidth, circle) {
   const dy = top + lineHeight / 2 - circle.y
   return Math.abs(dy) < circle.r ? Math.min(containerWidth, circle.x - Math.sqrt(circle.r ** 2 - dy ** 2)) : containerWidth
 }
+// layoutInBands references: the covered interval of a band, the free slots, and the layout with faults.
+function refCircleInterval(circle, top, bottom) {
+  const m = top <= circle.y && circle.y <= bottom ? 0 : Math.min(Math.abs(circle.y - top), Math.abs(circle.y - bottom))
+  if (m >= circle.r) return null
+  const dx = Math.sqrt(circle.r ** 2 - m ** 2)
+  return { left: circle.x - dx, right: circle.x + dx }
+}
+const refBlocked = (circles) => (top, bottom) => circles.map((c) => refCircleInterval(c, top, bottom)).filter(Boolean)
+function refFreeSlots(blocked, containerWidth, minSlot) {
+  const slots = []
+  let left = 0
+  for (const b of [...blocked].sort((p, q) => p.left - q.left)) {
+    if (b.left > left) slots.push({ left, right: Math.min(b.left, containerWidth) })
+    left = Math.max(left, b.right)
+  }
+  if (left < containerWidth) slots.push({ left, right: containerWidth })
+  return slots.filter((s) => s.right - s.left >= minSlot)
+}
+function refLayoutInBands({ widestOnly = false, zeroX = false, minSlot = MIN_SLOT, sampleMiddle = false, restart = true, emptyExit = true } = {}) {
+  return (prepared, containerWidth, containerHeight, lineHeight, blockedAt, loop = false) => {
+    const lines = []
+    let cursor
+    for (let y = 0; y + lineHeight <= containerHeight; y += lineHeight) {
+      const mid = y + lineHeight / 2
+      let slots = refFreeSlots(sampleMiddle ? blockedAt(mid, mid) : blockedAt(y, y + lineHeight), containerWidth, minSlot)
+      if (widestOnly) slots = slots.sort((a, b) => (b.right - b.left) - (a.right - a.left)).slice(0, 1)
+      for (const slot of slots) {
+        const maxWidth = slot.right - slot.left
+        let line = layoutNextLine(prepared, maxWidth, cursor)
+        if (line === null) {
+          if (!loop || !restart) return lines
+          cursor = undefined
+          line = layoutNextLine(prepared, maxWidth, cursor)
+          for (let spins = 0; line === null && !emptyExit; spins++) { // stands in for spinning forever
+            if (spins > 1000) throw new Error('never stopped on empty text')
+            line = layoutNextLine(prepared, maxWidth, undefined)
+          }
+          if (line === null) return lines
+        }
+        lines.push({ text: line.text, x: zeroX ? 0 : slot.left, y, width: line.width, maxWidth, end: line.end })
+        cursor = line.end
+      }
+    }
+    return lines
+  }
+}
+// One pixel per value, row-major, as maskBlocker takes it.
+function discMask(size, discs) {
+  const mask = new Uint8Array(size * size)
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (discs.some((d) => (x - d.x) ** 2 + (y - d.y) ** 2 <= d.r ** 2)) mask[y * size + x] = 1
+  return mask
+}
+function refMaskBlocker({ topRowOnly = false, scaleX = true, firstRunOnly = false, merge = true } = {}) {
+  return (mask, maskWidth, maskHeight, containerWidth, containerHeight) => (top, bottom) => {
+    const sx = scaleX ? containerWidth / maskWidth : 1, sy = containerHeight / maskHeight
+    const runs = []
+    for (let r = 0; r < maskHeight; r++) {
+      if (!(r * sy < bottom && (r + 1) * sy > top)) continue
+      const rowRuns = []
+      for (let c = 0; c < maskWidth; c++) {
+        if (!mask[r * maskWidth + c]) continue
+        const last = rowRuns[rowRuns.length - 1]
+        if (last && last.end === c) last.end = c + 1
+        else rowRuns.push({ start: c, end: c + 1 })
+      }
+      runs.push(...(firstRunOnly ? rowRuns.slice(0, 1) : rowRuns))
+      if (topRowOnly) break
+    }
+    const sorted = runs.sort((a, b) => a.start - b.start)
+    if (!merge) return sorted.map((u) => ({ left: u.start * sx, right: u.end * sx }))
+    const merged = []
+    for (const u of sorted) {
+      const last = merged[merged.length - 1]
+      if (last && u.start <= last.end) last.end = Math.max(last.end, u.end)
+      else merged.push({ ...u })
+    }
+    return merged.map((u) => ({ left: u.start * sx, right: u.end * sx }))
+  }
+}
+const sameIntervals = (a, b) => a.length === b.length && a.every((v, i) => Math.abs(v.left - b[i].left) < 1e-9 && Math.abs(v.right - b[i].right) < 1e-9)
+const BLOCKERS = (cw) => [[], [{ x: cw / 2, y: 100, r: 60 }], [{ x: 20, y: 70, r: 40 }, { x: cw - 20, y: 150, r: 40 }], [{ x: 60, y: 90, r: 50 }]]
 function refLayoutAroundCircle({ slot = bandSlot, minSlot = MIN_SLOT, skipTouched = false, advance = true, dropFirst = false, ignoreCircle = false } = {}) {
   return (prepared, containerWidth, lineHeight, circle) => {
     if (containerWidth < minSlot) return []
@@ -797,6 +878,102 @@ export default {
         })
         return boxes
       },
+    ],
+  },
+
+  // layoutInBands(prepared, containerWidth, containerHeight, lineHeight, blockedAt, loop) => lines, every slot of every band.
+  layoutInBands: {
+    check(fn) {
+      const LH = 20, H = 2000
+      const strip = (s) => s.replace(/\s+/g, '')
+      let twoSlots = 0, slivers = 0
+      for (const text of PARITY_TEXTS) {
+        const prepared = prepareWithSegments(text, FONT)
+        for (const cw of [20, 200, 420]) for (const circles of BLOCKERS(cw)) {
+          const at = `${show(text.slice(0, 16))} cw=${cw} circles=${show(circles)}`
+          const blockedAt = refBlocked(circles)
+          const lines = fn(prepared, cw, H, LH, blockedAt)
+          if (cw < MIN_SLOT) { assert(Array.isArray(lines) && lines.length === 0, `${at}: expected no lines`); continue }
+          const joined = lines.map((l) => (isSoftHyphenBreak(prepared, l) ? l.text.slice(0, -1) : l.text)).join('')
+          assert(strip(joined) === strip(text.replaceAll(SHY, '')), `${at}: lines don't spell the text: ${show(joined.slice(0, 60))}`)
+          let i = 0
+          for (let y = 0; y + LH <= H && i < lines.length; y += LH) {
+            const blocked = blockedAt(y, y + LH)
+            const slots = refFreeSlots(blocked, cw, MIN_SLOT)
+            if (refFreeSlots(blocked, cw, 0.5).length > slots.length) slivers++
+            let filled = 0
+            for (const slot of slots) {
+              if (i === lines.length) break
+              const l = lines[i++]
+              assert(l.y === y && l.x === slot.left && l.maxWidth === slot.right - slot.left, `${at}: line ${show(l.text)} at x=${l.x} y=${l.y} maxWidth=${l.maxWidth}, slot ${show(slot)} y=${y}`)
+              assert(l.width <= l.maxWidth + 1 / 64, `${at} y=${y}: width ${l.width} over ${l.maxWidth}`)
+              filled++
+            }
+            if (filled > 1) twoSlots++
+          }
+          assert(i === lines.length, `${at}: ${lines.length - i} lines outside the slots`)
+        }
+      }
+      assert(twoSlots > 0 && slivers > 0, `corpus too weak: ${twoSlots} two-slot bands, ${slivers} slivers`)
+      const short = prepareWithSegments('The quick brown fox', FONT)
+      const blockedAt = refBlocked([{ x: 100, y: 100, r: 60 }])
+      const looped = fn(short, 200, 400, LH, blockedAt, true)
+      let usable = 0
+      for (let y = 0; y + LH <= 400; y += LH) usable += refFreeSlots(blockedAt(y, y + LH), 200, MIN_SLOT).length
+      assert(looped.length === usable, `loop: ${looped.length} lines for ${usable} slots`)
+      assert(looped.map((l) => l.text).join('').split('fox').length > 3, 'loop: the text did not repeat')
+      assert(eq(fn(prepareWithSegments('', FONT), 200, 400, LH, () => [], true), []), 'loop over empty text returned lines')
+    },
+    mutants: [
+      refLayoutInBands({ widestOnly: true }),
+      refLayoutInBands({ zeroX: true }),
+      refLayoutInBands({ minSlot: 0.5 }),
+      refLayoutInBands({ sampleMiddle: true }),
+      refLayoutInBands({ restart: false }),
+      refLayoutInBands({ emptyExit: false }),
+    ],
+  },
+
+  // circleBlocker(circles) => (top, bottom) => the interval each circle covers in that band.
+  circleBlocker: {
+    check(fn) {
+      for (const circles of BLOCKERS(300)) {
+        const blockedAt = fn(circles)
+        for (let top = 0; top <= 400; top += 20) {
+          const got = blockedAt(top, top + 20), want = refBlocked(circles)(top, top + 20)
+          assert(Array.isArray(got) && got.every(Boolean) && sameIntervals(got, want), `band ${top}: ${show(got)}, expected ${show(want)}`)
+        }
+      }
+    },
+    mutants: [
+      (circles) => (top, bottom) => refBlocked(circles.slice(0, 1))(top, bottom),
+      (circles) => (top, bottom) => circles.map((c) => refCircleInterval(c, top, bottom)),
+      (circles) => (top, bottom) => refBlocked(circles)(bottom, top),
+    ],
+  },
+
+  // maskBlocker(mask, maskWidth, maskHeight, containerWidth, containerHeight) => (top, bottom) => merged intervals.
+  maskBlocker: {
+    check(fn) {
+      const masks = [discMask(100, [{ x: 50, y: 50, r: 30 }]), discMask(100, [{ x: 30, y: 50, r: 15 }, { x: 70, y: 56, r: 15 }])]
+      let covered = 0, twoRuns = 0
+      for (const mask of masks) for (const [cw, ch] of [[400, 400], [333, 250]]) {
+        const got = fn(mask, 100, 100, cw, ch), want = refMaskBlocker()(mask, 100, 100, cw, ch)
+        for (const [start, step] of [[0, 20], [7, 20], [0, 13]]) for (let top = start; top < ch; top += step) {
+          const a = got(top, top + step), b = want(top, top + step)
+          assert(sameIntervals(a, b), `${cw}x${ch} band ${top}: ${show(a)}, expected ${show(b)}`)
+          if (b.length) covered++
+          if (b.length > 1) twoRuns++
+        }
+        assert(got(ch, ch + 20).length === 0, `${cw}x${ch}: covered below the mask`)
+      }
+      assert(covered > 0 && twoRuns > 0, `corpus too weak: ${covered} covered bands, ${twoRuns} with two runs`)
+    },
+    mutants: [
+      refMaskBlocker({ topRowOnly: true }),
+      refMaskBlocker({ scaleX: false }),
+      refMaskBlocker({ firstRunOnly: true }),
+      refMaskBlocker({ merge: false }),
     ],
   },
 }
