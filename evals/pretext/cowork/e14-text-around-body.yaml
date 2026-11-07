@@ -1,0 +1,32 @@
+name: e14-text-around-body
+session: _session.yaml
+fidelity: hostloop
+prompt: 'A dragon follows the cursor through an article painted on a canvas, in plain JavaScript, and the text has
+  to part around its body: text stays on both sides of it, wherever it is in the column. The body is a list of circles.
+  I ran `npm i @chenglou/pretext` today.
+
+
+  Write `body-flow.js`, an ES module exporting `flowAroundBody(text, font, width, height, lineHeight, circles)`.
+  `circles` is an array of `{ x, y, r }`. It returns an array of `{ text, x, y }`, one per placed piece of line,
+  with `y` the top of the line. It runs on every frame. Don''t draw anything.
+
+
+  Save every file you produce directly in {{workspaceFolder}}.'
+assert:
+- result: success
+- skill_triggered: pretext
+- user_visible_artifact: outputs/body-flow.js
+- semantic_matches:
+    rubric:
+    - Every layoutNextLine or layoutNextLineRange call in body-flow.js passes the width as the second argument and
+      the cursor as the third.
+    - For each band of lineHeight, the blocked interval of a circle covers its widest extent anywhere within the
+      band's top and bottom, not only its chord at the band's centre or top line.
+    - 'A band can hold more than one piece of text: every free slot wide enough for text is filled, left to right,
+      so text sits on both sides of a circle.'
+    - One cursor runs through every slot and band in order, so no text is repeated or skipped between pieces.
+    - Slots narrower than a minimum width are skipped rather than given a sliver of text.
+    - 'prepare or prepareWithSegments is not called again on every frame for the same text and font: the prepared
+      handle is cached or created once outside the per-frame path.'
+    evidence_files:
+    - outputs/body-flow.js

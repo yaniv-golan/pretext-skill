@@ -1,0 +1,30 @@
+name: e13-exploding-characters
+session: _session.yaml
+fidelity: hostloop
+prompt: 'I''m adding a click-to-explode effect to an article painted on a canvas with one fillText per line, in
+  plain JavaScript. I ran `npm i @chenglou/pretext` today. Before the explosion nothing should visibly move: the
+  letters start exactly where the painted lines put them, then each one flies off as a particle.
+
+
+  Write `explode-layout.js`, an ES module exporting `layoutCharacters(text, font, maxWidth, lineHeight)`. It returns
+  an array of `{ grapheme, x, y, width }`, one per character, with `x` from the start of the line and `y` the top
+  of the line. Don''t draw anything.
+
+
+  Save every file you produce directly in {{workspaceFolder}}.'
+assert:
+- result: success
+- skill_triggered: pretext
+- user_visible_artifact: outputs/explode-layout.js
+- semantic_matches:
+    rubric:
+    - explode-layout.js gets each line's text and position from pretext's line layout (layoutWithLines or the layoutNextLine
+      family); it doesn't wrap the text itself.
+    - Each grapheme's x is the canvas measureText width of the line's text up to and including that grapheme, minus
+      the measured width of the grapheme itself. Adding up widths of graphemes measured on their own, or measuring
+      the prefix before the grapheme, doesn't count.
+    - Lines are split into grapheme clusters (Intl.Segmenter with granularity grapheme, or an equivalent), not with
+      split(''), indexing or other UTF-16 code-unit iteration.
+    - explode-layout.js reads no undocumented field of a prepared handle, such as breakableFitAdvances or breakableWidths.
+    evidence_files:
+    - outputs/explode-layout.js
