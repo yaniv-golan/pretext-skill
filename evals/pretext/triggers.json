@@ -139,6 +139,24 @@
       "prompt": "Add a confetti burst on a canvas when the user clicks the Buy button.",
       "expect": "no-trigger",
       "set": "heldout"
+    },
+    {
+      "id": "nm-split",
+      "prompt": "Animate each letter of our hero heading in one after another, using GSAP SplitText on the DOM.",
+      "expect": "no-trigger",
+      "set": "nearmiss"
+    },
+    {
+      "id": "nm-css-wave",
+      "prompt": "Add a CSS keyframe wave to the letters of our logo text.",
+      "expect": "no-trigger",
+      "set": "nearmiss"
+    },
+    {
+      "id": "nm-three",
+      "prompt": "Render our product name as extruded 3D text in Three.js that spins slowly.",
+      "expect": "no-trigger",
+      "set": "nearmiss"
     }
   ]
 }

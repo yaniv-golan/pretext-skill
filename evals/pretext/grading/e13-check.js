@@ -24,6 +24,10 @@ export default async (mod, { core }) => {
   if (chars.some((c) => c.y % LH !== 0)) bad.push(['y'])
   lines.forEach((line, row) => {
     const boxes = chars.filter((c) => c.y === row * LH)
+    const expected = [...segmenter.segment(line.text)].map((g) => g.segment)
+    const visible = (list) => list.filter((g) => g.trim())
+    if (visible(boxes.map((b) => b.grapheme)).join('\0') !== visible(expected).join('\0')) bad.push(['not one box per grapheme', row])
+    for (const b of boxes) if (Math.abs(b.width - ctx.measureText(b.grapheme).width) > 0.01) bad.push(['width', row, b.grapheme])
     const whole = draw((g) => g.fillText(line.text, 2, 8))
     const parts = draw((g) => { for (const b of boxes) g.fillText(b.grapheme, 2 + b.x, 8) })
     let diff = 0, ink = 0

@@ -387,4 +387,26 @@ export const CLAIMS = [
       assert(naive > 0.5, `summing own widths differs by only ${naive}`)
     },
   },
+  {
+    id: 'glyph-alternates-differ', source: PROBE + ": Inter's contextual alternates: 1x2 0.34, a -> b 0.25", engines: ['chromium', 'webkit'], recipe: 'glyphPositions',
+    run() {
+      const ctx = document.createElement('canvas').getContext('2d')
+      ctx.font = FONT
+      for (const text of ['1x2', '10:30', 'a -> b']) {
+        const ratio = glyphPaintRatio(text, globalThis.__recipes.glyphPositions(ctx, text))
+        assert(ratio > 0.05, `${JSON.stringify(text)}: alternates no longer show, ratio ${ratio}`)
+      }
+    },
+  },
+  {
+    id: 'ink-bounds-by-engine', source: PROBE + ': 64px Inter, the glyph . drawn at 4..14', engines: ['chromium', 'webkit'],
+    run({ engine }) {
+      const ctx = document.createElement('canvas').getContext('2d')
+      ctx.font = '64px Inter'
+      const m = ctx.measureText('.')
+      const left = -m.actualBoundingBoxLeft, right = m.actualBoundingBoxRight
+      if (engine === 'webkit') assert(Math.abs(left) < 0.5 && Math.abs(right - m.width) < 0.5, `WebKit gave ink ${left}..${right}, advance ${m.width}`)
+      else assert(left > 2 && right < m.width - 2, `Chromium gave ${left}..${right}, advance ${m.width}`)
+    },
+  },
 ]

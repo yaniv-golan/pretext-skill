@@ -129,6 +129,7 @@ const pooled = {
   'NO-TRIGGER': pool('NO-TRIGGER', (p) => p.set === 'tuned' && p.expect === 'no-trigger'),
   'HELDOUT-TRIGGER': pool('HELDOUT-TRIGGER', (p) => p.set === 'heldout' && p.expect === 'trigger'),
   'HELDOUT-NO-TRIGGER': pool('HELDOUT-NO-TRIGGER', (p) => p.set === 'heldout' && p.expect === 'no-trigger'),
+  'NEAR-MISS': pool('NEAR-MISS', (p) => p.set === 'nearmiss'),
 }
 const cost = Object.values(results).flat().reduce((a, r) => a + r.cost, 0)
 console.log(`COST $${cost.toFixed(2)} over ${Object.values(results).flat().length} runs`)

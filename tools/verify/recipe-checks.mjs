@@ -192,14 +192,16 @@ function refCircleInterval(circle, top, bottom) {
 }
 const refBlocked = (circles) => (top, bottom) => circles.map((c) => refCircleInterval(c, top, bottom)).filter(Boolean)
 function refFreeSlots(blocked, containerWidth, minSlot) {
-  const slots = []
-  let left = 0
-  for (const b of [...blocked].sort((p, q) => p.left - q.left)) {
-    if (b.left > left) slots.push({ left, right: Math.min(b.left, containerWidth) })
-    left = Math.max(left, b.right)
+  const merged = []
+  for (const b of blocked.map((v) => ({ left: Math.max(0, v.left), right: Math.min(containerWidth, v.right) })).filter((v) => v.right > v.left).sort((p, q) => p.left - q.left)) {
+    const last = merged[merged.length - 1]
+    if (last && b.left <= last.right) last.right = Math.max(last.right, b.right)
+    else merged.push({ ...b })
   }
-  if (left < containerWidth) slots.push({ left, right: containerWidth })
-  return slots.filter((s) => s.right - s.left >= minSlot)
+  const edges = [0, ...merged.flatMap((b) => [b.left, b.right]), containerWidth]
+  const slots = []
+  for (let i = 0; i < edges.length; i += 2) if (edges[i + 1] - edges[i] >= minSlot) slots.push({ left: edges[i], right: edges[i + 1] })
+  return slots
 }
 function refLayoutInBands({ widestOnly = false, zeroX = false, minSlot = MIN_SLOT, sampleMiddle = false, restart = true, emptyExit = true } = {}) {
   return (prepared, containerWidth, containerHeight, lineHeight, blockedAt, loop = false) => {
@@ -263,7 +265,7 @@ function refMaskBlocker({ topRowOnly = false, scaleX = true, firstRunOnly = fals
   }
 }
 const sameIntervals = (a, b) => a.length === b.length && a.every((v, i) => Math.abs(v.left - b[i].left) < 1e-9 && Math.abs(v.right - b[i].right) < 1e-9)
-const BLOCKERS = (cw) => [[], [{ x: cw / 2, y: 100, r: 60 }], [{ x: 20, y: 70, r: 40 }, { x: cw - 20, y: 150, r: 40 }], [{ x: 60, y: 90, r: 50 }]]
+const BLOCKERS = (cw) => [[], [{ x: cw / 2, y: 100, r: 60 }], [{ x: 20, y: 70, r: 40 }, { x: cw - 20, y: 150, r: 40 }], [{ x: 60, y: 90, r: 50 }], [{ x: cw / 2 + 10, y: 110, r: 30 }, { x: cw / 2, y: 100, r: 60 }]]
 // buildGlyphPalette with faults, for its mutants.
 function refGlyphPalette({ inkFromIndex = false, sorted = true, widthFilter = true, space = true } = {}) {
   return (chars, fonts, cellWidth, cellHeight) => {
@@ -271,7 +273,7 @@ function refGlyphPalette({ inkFromIndex = false, sorted = true, widthFilter = tr
     canvas.width = cellWidth; canvas.height = cellHeight
     const g = canvas.getContext('2d', { willReadFrequently: true })
     const all = []
-    for (const font of fonts) [...chars].forEach((char, i) => {
+    for (const font of fonts) graphemes(chars).forEach((char, i) => {
       const width = measureNaturalWidth(prepare(char, font, { whiteSpace: 'pre-wrap' }))
       if (widthFilter && width > cellWidth) return
       g.clearRect(0, 0, cellWidth, cellHeight)
@@ -860,6 +862,7 @@ export default {
       const w = (s) => ctx.measureText(s).width
       const kern = Math.abs(graphemes(GLYPH_TEXTS[0]).reduce((a, g) => a + w(g), 0) - w(GLYPH_TEXTS[0]))
       assert(kern > 5, `corpus too weak: font does not kern (${kern}px)`)
+      assert(GLYPH_TEXTS[2].includes('\u0301'), 'the combining mark was normalized away')
       for (const text of GLYPH_TEXTS) {
         const boxes = fn(ctx, text)
         assert(eq(boxes.map((b) => b.grapheme), graphemes(text)), `${show(text)}: graphemes ${show(boxes.map((b) => b.grapheme))}`)
@@ -891,6 +894,14 @@ export default {
           const width = ctx.measureText(grapheme).width
           return { grapheme, x: ctx.measureText(text.slice(0, at)).width - width, width }
         })
+      },
+      (ctx, text) => { // a surrogate pair or flag counted as one code unit
+        const boxes = []
+        for (const { segment: grapheme, index } of new Intl.Segmenter().segment(text)) {
+          const width = ctx.measureText(grapheme).width
+          boxes.push({ grapheme, x: ctx.measureText(text.slice(0, index + 1)).width - width, width })
+        }
+        return boxes
       },
       (ctx, text) => { // each segment's width spread evenly over its graphemes
         const prepared = prepareWithSegments(text, FONT)
@@ -958,6 +969,29 @@ export default {
     ],
   },
 
+  // freeSlots(blocked, containerWidth, minSlot) => free intervals, left to right.
+  freeSlots: {
+    check(fn) {
+      for (const [blocked, cw, min, want] of [
+        [[], 200, 10, [{ left: 0, right: 200 }]],
+        [[{ left: 50, right: 150 }, { left: 80, right: 100 }], 300, 10, [{ left: 0, right: 50 }, { left: 150, right: 300 }]], // one inside another
+        [[{ left: 200, right: 220 }, { left: 50, right: 80 }], 300, 10, [{ left: 0, right: 50 }, { left: 80, right: 200 }, { left: 220, right: 300 }]], // out of order
+        [[{ left: 250, right: 400 }], 200, 10, [{ left: 0, right: 200 }]], // past the container
+        [[{ left: -20, right: 30 }], 200, 10, [{ left: 30, right: 200 }]], // before it
+        [[{ left: 5, right: 100 }], 200, 10, [{ left: 100, right: 200 }]], // a sliver
+        [[{ left: 0, right: 200 }], 200, 10, []], // nothing left
+      ]) {
+        const got = fn(blocked, cw, min)
+        assert(sameIntervals(got, want), `${show(blocked)}: ${show(got)}, expected ${show(want)}`)
+      }
+    },
+    mutants: [
+      (blocked, cw, min) => { let left = 0; const o = []; for (const b of [...blocked].sort((p, q) => p.left - q.left)) { if (b.left > left) o.push({ left, right: Math.min(b.left, cw) }); left = b.right } if (left < cw) o.push({ left, right: cw }); return o.filter((v) => v.right - v.left >= min) }, // overlap forgotten
+      (blocked, cw, min) => { let left = 0; const o = []; for (const b of blocked) { if (b.left > left) o.push({ left, right: Math.min(b.left, cw) }); left = Math.max(left, b.right) } if (left < cw) o.push({ left, right: cw }); return o.filter((v) => v.right - v.left >= min) }, // not sorted
+      (blocked, cw, min) => { let left = 0; const o = []; for (const b of [...blocked].sort((p, q) => p.left - q.left)) { if (b.left > left) o.push({ left, right: b.left }); left = Math.max(left, b.right) } if (left < cw) o.push({ left, right: cw }); return o.filter((v) => v.right - v.left >= min) }, // not clipped
+    ],
+  },
+
   // circleBlocker(circles) => (top, bottom) => the interval each circle covers in that band.
   circleBlocker: {
     check(fn) {
@@ -1015,6 +1049,9 @@ export default {
       const q = fn('WM.', [FONT], 12, 20)
       for (const c of 'WM') assert(q.some((g) => g.char === c) === preWrapWidth(c) <= 12, `${c}: cell filter`)
       assert(q.some((g) => g.char === ' '), 'no space in a palette built without one')
+      const family = '\u{1F469}\u200D\u{1F469}\u200D\u{1F467}', decomposed = 'e\u0301'
+      const whole = fn(`${family}${decomposed}`, [FONT], 40, 40).map((g) => g.char)
+      assert(whole.includes(family) && whole.includes(decomposed) && !whole.includes('\u200D') && !whole.includes('\u0301'), `split a grapheme: ${show(whole)}`)
       const pick = globalThis.__recipes.pickGlyph
       if (pick && fn === globalThis.__recipes.buildGlyphPalette) {
         assert(pick(p, 0).char === ' ' && pick(p, 1).ink === 1, 'pickGlyph ends')

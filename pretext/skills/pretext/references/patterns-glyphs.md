@@ -21,12 +21,13 @@ Don't reach into the handle for this. A `prepareWithSegments()` handle holds mor
 
 ## Per-character positions
 
-Measure each line in canvas, up to and including the letter. Taking the letter's own width back off leaves the place where one `fillText` of the whole line draws it:
+Measure each line in canvas, up to and including the letter. Taking the letter's own width back off leaves the place where one `fillText` of the whole line draws it, for the left-to-right text described below:
 
 ```ts run id=glyphPositions
 type GlyphBox = { grapheme: string; x: number; width: number }
 
-// Set ctx.font to the font the text was prepared with first. x is from the start of the line.
+// Set ctx.font to the font the text was prepared with first, and ctx.letterSpacing if it was prepared
+// with letterSpacing (in px, such as '0.8px'). x is from the start of the line.
 function glyphPositions(ctx: CanvasRenderingContext2D, text: string): GlyphBox[] {
   const boxes: GlyphBox[] = []
   for (const { segment: grapheme, index } of new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)) {
@@ -52,7 +53,7 @@ function layoutGlyphs(prepared: PreparedTextWithSegments, font: string, maxWidth
 - **Compute the boxes once per layout**, then animate from them. Each box measures a growing prefix, so the work is quadratic in the line's length: fine once, wasteful on every frame.
 - **Add the line's own `x`** when lines don't start at 0, as in [text around obstacles](patterns-flow.md#text-around-obstacles).
 - **Left-to-right text only.** Arabic and other joining scripts change shape when their letters are apart, and right-to-left text needs visual order, which a string prefix doesn't give. Animate whole words or lines for those.
-- **Ligatures.** Letters inside a ligature, such as `ffi` in some fonts, have only approximate positions.
+- **Ligatures and contextual alternates.** A font can change a letter's shape by its neighbours, so a letter drawn alone isn't always the one in the line. Letters inside a ligature, such as `ffi` in some fonts, have only approximate positions. Inter swaps in alternates for `x` between digits, `:` between digits, `->` and parentheses around capitals, so text such as `10:30` shows a small jump on the first frame an effect separates it. To avoid that, paint separated letters from the start, or use a font without such alternates.
 - **Emoji.** In WebKit a colour emoji between other text can land slightly off.
 - **Text painted in the DOM** can sit a little differently from canvas, so these boxes are for canvas. For DOM text, read `Range.getClientRects()`, which is the browser's answer and not Pretext's.
 
@@ -60,9 +61,13 @@ function layoutGlyphs(prepared: PreparedTextWithSegments, font: string, maxWidth
 
 ## Ink bounds for collisions
 
-`x` and `width` are advances: the space a letter takes up in the line, not the shape you see. A game that collides with the visible letter needs its ink, which comes from canvas too: `ctx.measureText(grapheme)` returns `actualBoundingBoxLeft`, `actualBoundingBoxRight`, `actualBoundingBoxAscent` and `actualBoundingBoxDescent`, measured from the point it is drawn at. Keep them per grapheme and font, since the same letter always has the same ink.
+`x` and `width` are advances: the space a letter takes up in the line, not the shape you see. A game that collides with the visible letter needs its ink, and Pretext doesn't have that.
 
-For word-sized targets, such as bricks made of words, the line's advance widths are usually enough: each word's box is its width plus your padding.
+`ctx.measureText(grapheme)` gives `actualBoundingBoxAscent` and `actualBoundingBoxDescent`, which agree across engines. Its `actualBoundingBoxLeft` and `actualBoundingBoxRight` don't: Chromium reports the ink, while WebKit reports the advance box, so a `.` looks as wide as its whole advance. Measure with `textBaseline = 'alphabetic'` and `textAlign = 'left'`, since both shift these values.
+
+For tight bounds on every engine, draw the glyph once on a small canvas and scan its alpha, as `buildGlyphPalette` does below. Keep the result per grapheme and font, and remember that [alternates](#per-character-positions) can give the same letter a different shape in a line.
+
+For word-sized targets, such as bricks made of words, advances are usually enough. Group a line's boxes by word: a word runs from its first box's `x` to its last box's `x + width`, plus your padding.
 
 ---
 
@@ -70,7 +75,7 @@ For word-sized targets, such as bricks made of words, the line's advance widths 
 
 Placing each character after the last, by its own width, warps a picture in a proportional font: a row of `@` runs far wider than a row of `.`, so the same source column lands in a different place on every row. Keep a fixed grid of cells instead, and let the palette bring the variety: each cell draws the glyph whose ink best matches the pixel, among the glyphs narrow enough to fit.
 
-Pretext measures how wide each glyph is. How much ink it has can only come from drawing it:
+Pretext's share here is small: it measures how wide each glyph is, which one `measureText` per glyph would also do, so use it when the page already prepares text with it. How much ink a glyph has can only come from drawing it:
 
 ```ts run id=buildGlyphPalette,pickGlyph
 type PaletteGlyph = { char: string; font: string; width: number; ink: number }
@@ -81,10 +86,11 @@ function buildGlyphPalette(chars: string, fonts: string[], cellWidth: number, ce
   canvas.height = cellHeight
   const context = canvas.getContext('2d', { willReadFrequently: true })!
   context.textBaseline = 'middle'
+  const graphemes = Array.from(new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(chars), (part) => part.segment)
   const glyphs: PaletteGlyph[] = []
   for (const font of fonts) {
     context.font = font
-    for (const char of new Set([' ', ...chars])) {
+    for (const char of new Set([' ', ...graphemes])) {
       const width = measureNaturalWidth(prepare(char, font, { whiteSpace: 'pre-wrap' })) // a lone space needs pre-wrap
       if (width > cellWidth && char !== ' ') continue
       context.clearRect(0, 0, cellWidth, cellHeight)

@@ -29,7 +29,7 @@ export const PAINTABLE_TEXT = 'well-known contre-pro\u00ADposition co\u00ADopera
 
 // Per-character recipes. Kerned capitals first; the third text keeps U+0301 as an escape so that
 // normalizing this file can't compose it, and holds the ZWJ emoji the grapheme split must keep whole.
-export const GLYPH_TEXTS = ['AVATAR Tokyo WAVE To Ty Yo', 'We Were Taking Awkward Vows', 'café 👩‍👩‍👧 ok', 'office affinity fjord']
+export const GLYPH_TEXTS = ['AVATAR Tokyo WAVE To Ty Yo', 'We Were Taking Awkward Vows', 'cafe\u0301 👩‍👩‍👧 ok', 'office affinity fjord', 'go 🇺🇸 now']
 export const GLYPH_PAINT_TEXTS = GLYPH_TEXTS.filter((t) => !/\p{Extended_Pictographic}/u.test(t))
 
 // How far drawing each box's grapheme at its x is from one fillText of the whole line:

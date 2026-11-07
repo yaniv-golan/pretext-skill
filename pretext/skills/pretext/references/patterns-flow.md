@@ -199,7 +199,8 @@ function circleBlocker(circles: Circle[]) {
     circles.flatMap((circle) => circleIntervalForBand(circle, top, bottom) ?? [])
 }
 
-// With `loop`, the text starts again when it runs out, for decorative text that fills a shape.
+// With `loop`, the text starts again when it runs out, for decorative text that fills a shape. A line
+// holds at most the whole text, so repeat a text shorter than a slot before preparing it.
 function layoutInBands(
   prepared: PreparedTextWithSegments, containerWidth: number, containerHeight: number, lineHeight: number,
   blockedAt: (top: number, bottom: number) => Interval[], loop = false,
@@ -232,7 +233,7 @@ function paintFlow() { // every frame, after moving `body`
 }
 ```
 
-Any shape works if you can say which part of a band it covers. A mask gives that directly: one value per pixel, such as a frame's alpha or a thresholded webcam segmentation, non-zero where the shape is. A column is blocked when any mask row in the band covers it, the same whole-band rule as for a circle. Build the blocker from each new frame:
+Any shape works if you can say which part of a band it covers. A mask gives that directly: one value per pixel, row by row, non-zero where the shape is, such as a webcam segmentation or a thresholded frame. Don't pass `ImageData.data`, which holds four values per pixel; a video frame's alpha is no use either, since it is opaque everywhere. Take one channel and threshold it into a `Uint8Array`. A column is blocked when any mask row in the band covers it, the same whole-band rule as for a circle. Build the blocker from each new frame:
 
 ```ts run id=maskBlocker
 function maskBlocker(mask: ArrayLike<number>, maskWidth: number, maskHeight: number, containerWidth: number, containerHeight: number) {
@@ -255,7 +256,7 @@ function maskBlocker(mask: ArrayLike<number>, maskWidth: number, maskHeight: num
 }
 ```
 
-- To fill the shape instead of flowing around it, block its outside: pass a mask with the values inverted.
+- To fill the shape instead of flowing around it, block its outside: invert the mask with `value ? 0 : 1`.
 - For padding around each obstacle, widen its intervals; upstream's [editorial-engine.ts](https://github.com/chenglou/pretext/blob/v1.0.0/pages/demos/editorial-engine.ts) does this per obstacle.
 - Mixed-direction text has the limits in [accuracy.md](accuracy.md#painting), as for any line painted on its own.
 

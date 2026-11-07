@@ -43,7 +43,7 @@ Read the project's `package.json` (or run `npm ls @chenglou/pretext`) before wri
 - **Content is HTML, not text**: tables, code blocks and nested elements need DOM measurement.
 - **Virtualizers with mixed content** (images of unknown size, embeds, HTML): these need DOM measuring. When all content is Pretext-measured, Pretext heights work in a virtualizer such as TanStack Virtual with no `measureElement` loop.
 - **Accordion content with HTML structure**: measure it off-screen in the DOM.
-- **A fixed grid with nothing to wrap** (letters on a game board, a terminal view): the cell size is all you need.
+- **Letters on a fixed grid with nothing to wrap** (a game board, a terminal view): use the cell size. Pretext adds nothing until text has to wrap or fit its measured width.
 
 ## Quick Start
 
@@ -210,7 +210,7 @@ Live at https://chenglou.me/pretext/. In the repository: clone, `bun install`, `
 - `markdown-chat`: virtualized Markdown chat; the virtualization reference
 - `masonry`: masonry from predicted heights
 - `rich-note`: notes with mentions and chips
-- `variable-typographic-ascii`: ASCII art from glyph widths
+- `variable-typographic-ascii`: ASCII art from glyph widths; [patterns-glyphs.md](references/patterns-glyphs.md#proportional-ascii-art) has a fixed-grid recipe
 
 Community demos (pretext.cool, awesome-pretext) mostly predate 1.0: they pass `layoutNextLine` its cursor second, and some read handle internals. Use them for ideas, and take signatures from the references ([migration.md](references/migration.md#code-from-community-demos)).
 

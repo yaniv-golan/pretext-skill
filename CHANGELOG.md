@@ -24,7 +24,9 @@ Coverage for the creative demos around Pretext: letters that move on their own, 
 
 ### Notes
 - Verified on Chromium and WebKit; Firefox could not be launched here and is unverified
-- Trigger eval, 23 prompts × 3 runs, before and after the new description (3 errored runs left out of the baseline): moving-letters prompts 3/10 to 11/12, held-out moving-letters prompts 1/8 to 9/9, established prompts 33/33 both times, prompts that shouldn't trigger 0/12 both times. One machine, one model, with this machine's installed skills competing; `explode` was noisy before the change
+- Trigger eval, 23 prompts × 3 runs, before and after the new description (3 timed-out runs left out of the baseline): moving-letters prompts 3/10 to 11/12, held-out prompts 1/8 to 9/9, established prompts 33/33 both times, prompts that shouldn't trigger 0/12 both times. Three near-miss prompts added afterwards (GSAP SplitText, CSS letter waves, Three.js text) scored 0/9 on the new description only
+- Reading those numbers: all 3 baseline hits in the moving-letters group were one prompt (`explode`), which had missed 0/2 in an earlier run, so it is noisy. `tetris`, scored as either way, went 0/3 to 3/3, though a fixed letter grid may not need Pretext. The held-out prompts were written with the same plan as the description, so 9/9 isn't independent evidence. One machine, one model, with this machine's installed skills competing
+- Known limits of `glyphPositions`: Inter's contextual alternates (`10:30`, `1x2`, `->`) differ from a lone glyph, and WebKit reports `actualBoundingBoxLeft/Right` as the advance box; both are held by verifier claims
 
 ## [0.3.0] - 2026-11-06
 
