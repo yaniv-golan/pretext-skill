@@ -25,6 +25,7 @@ assert:
       the prefix before the grapheme, doesn't count.
     - Lines are split into grapheme clusters (Intl.Segmenter with granularity grapheme, or an equivalent), not with
       split(''), indexing or other UTF-16 code-unit iteration.
-    - explode-layout.js reads no undocumented field of a prepared handle, such as breakableFitAdvances or breakableWidths.
+    - explode-layout.js reads no field of a prepared handle other than the public segments, kinds and widths, such
+      as the internal breakableFitAdvances or breakableWidths.
     evidence_files:
     - outputs/explode-layout.js
