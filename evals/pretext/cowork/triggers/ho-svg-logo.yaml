@@ -1,0 +1,11 @@
+# Generated from ../../triggers.json by grading/cowork-triggers.mjs. Edit that file, not this one.
+name: trigger-ho-svg-logo
+session: _session.yaml
+fidelity: hostloop
+timeout_ms: 170000
+on_unanswered: fail
+prompt: "Animate our SVG logo so the outline draws itself on page load."
+assert:
+- skill_available: "(^|:)pretext$"
+- no_skill_triggered: "(^|:)pretext$"
+- allow_max_turns: true

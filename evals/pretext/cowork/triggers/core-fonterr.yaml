@@ -1,0 +1,11 @@
+# Generated from ../../triggers.json by grading/cowork-triggers.mjs. Edit that file, not this one.
+name: trigger-core-fonterr
+session: _session.yaml
+fidelity: hostloop
+timeout_ms: 170000
+on_unanswered: fail
+prompt: "Since an upgrade I get \"Uncaught RangeError: font must be a font string Canvas takes\" in the console. What causes it?"
+assert:
+- skill_available: "(^|:)pretext$"
+- skill_triggered: "(^|:)pretext$"
+- allow_max_turns: true

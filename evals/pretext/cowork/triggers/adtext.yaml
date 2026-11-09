@@ -1,0 +1,11 @@
+# Generated from ../../triggers.json by grading/cowork-triggers.mjs. Edit that file, not this one.
+name: trigger-adtext
+session: _session.yaml
+fidelity: hostloop
+timeout_ms: 170000
+on_unanswered: fail
+prompt: "Add typewriter, bounce and wave text animations to our ad video generator, which draws on a canvas."
+assert:
+- skill_available: "(^|:)pretext$"
+- skill_triggered: "(^|:)pretext$"
+- allow_max_turns: true

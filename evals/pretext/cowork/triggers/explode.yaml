@@ -1,0 +1,11 @@
+# Generated from ../../triggers.json by grading/cowork-triggers.mjs. Edit that file, not this one.
+name: trigger-explode
+session: _session.yaml
+fidelity: hostloop
+timeout_ms: 170000
+on_unanswered: fail
+prompt: "Build a click-to-explode effect for an article: every character flies apart as a physics particle on a canvas and then reassembles."
+assert:
+- skill_available: "(^|:)pretext$"
+- skill_triggered: "(^|:)pretext$"
+- allow_max_turns: true

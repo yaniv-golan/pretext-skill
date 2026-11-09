@@ -1,0 +1,11 @@
+# Generated from ../../triggers.json by grading/cowork-triggers.mjs. Edit that file, not this one.
+name: trigger-crawl
+session: _session.yaml
+fidelity: hostloop
+timeout_ms: 170000
+on_unanswered: fail
+prompt: "Build a perspective text crawl where the paragraph rewraps continuously as it recedes and the column narrows."
+assert:
+- skill_available: "(^|:)pretext$"
+- skill_triggered: "(^|:)pretext$"
+- allow_max_turns: true

@@ -1,0 +1,11 @@
+# Generated from ../../triggers.json by grading/cowork-triggers.mjs. Edit that file, not this one.
+name: trigger-core-float
+session: _session.yaml
+fidelity: hostloop
+timeout_ms: 170000
+on_unanswered: fail
+prompt: "Our article is painted on a canvas, so CSS float is out. The text has to wrap around an image at the top left: lines beside it are shorter. How do I work out the lines?"
+assert:
+- skill_available: "(^|:)pretext$"
+- skill_triggered: "(^|:)pretext$"
+- allow_max_turns: true

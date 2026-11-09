@@ -1,0 +1,11 @@
+# Generated from ../../triggers.json by grading/cowork-triggers.mjs. Edit that file, not this one.
+name: trigger-ho-confetti
+session: _session.yaml
+fidelity: hostloop
+timeout_ms: 170000
+on_unanswered: fail
+prompt: "Add a confetti burst on a canvas when the user clicks the Buy button."
+assert:
+- skill_available: "(^|:)pretext$"
+- no_skill_triggered: "(^|:)pretext$"
+- allow_max_turns: true

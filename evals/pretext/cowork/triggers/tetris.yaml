@@ -1,0 +1,10 @@
+# Generated from ../../triggers.json by grading/cowork-triggers.mjs. Edit that file, not this one.
+name: trigger-tetris
+session: _session.yaml
+fidelity: hostloop
+timeout_ms: 170000
+on_unanswered: fail
+prompt: "Build a falling-blocks puzzle game in the browser where the pieces are made of letters instead of squares."
+assert:
+- skill_available: "(^|:)pretext$"
+- allow_max_turns: true

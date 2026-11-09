@@ -1,0 +1,7 @@
+model: claude-sonnet-5-5
+agent_max_turns: 2
+permission_parity: strict
+plugins:
+  local_plugins:
+  - ../../../../pretext
+  from_host: true

@@ -1,0 +1,11 @@
+# Generated from ../../triggers.json by grading/cowork-triggers.mjs. Edit that file, not this one.
+name: trigger-nm-three
+session: _session.yaml
+fidelity: hostloop
+timeout_ms: 170000
+on_unanswered: fail
+prompt: "Render our product name as extruded 3D text in Three.js that spins slowly."
+assert:
+- skill_available: "(^|:)pretext$"
+- no_skill_triggered: "(^|:)pretext$"
+- allow_max_turns: true

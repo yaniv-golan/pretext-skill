@@ -1,0 +1,11 @@
+# Generated from ../../triggers.json by grading/cowork-triggers.mjs. Edit that file, not this one.
+name: trigger-ctl-css
+session: _session.yaml
+fidelity: hostloop
+timeout_ms: 170000
+on_unanswered: fail
+prompt: "How do I center a div and wrap long text inside it with CSS flexbox?"
+assert:
+- skill_available: "(^|:)pretext$"
+- no_skill_triggered: "(^|:)pretext$"
+- allow_max_turns: true
